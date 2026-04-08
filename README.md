@@ -111,6 +111,7 @@ Backend (NestJS)
 * Socket.IO
 * Yjs (CRDT)
 
+---
 
 ## 🗄️ Data Strategy
 
@@ -147,6 +148,7 @@ Handles:
 * Conflict resolution
 * Update logs & snapshots
 
+---
 
 ## Realtime Flow
 
@@ -184,15 +186,11 @@ Create `.env` in backend:
 
 ```
 
----
-
 ### 4. Run migration
 
 ```bash
 
 ```
-
----
 
 ### 5. Start project
 
@@ -241,7 +239,6 @@ frontend/
 
 ---
 
-
 ## Core Concepts
 
 ### CRDT (Yjs)
@@ -250,14 +247,12 @@ frontend/
 * Real-time sync
 * Offline support
 
----
 
 ### WebSocket (Socket.IO)
 
 * Real-time communication
 * Chat + document sync
 
----
 
 ### Redis
 
