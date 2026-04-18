@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { TaskBoardsService } from './task-boards.service';
 import { CreateTaskBoardDto } from './dto/create-task-board.dto';
 import { UpdateTaskBoardDto } from './dto/update-task-board.dto';
@@ -23,7 +31,10 @@ export class TaskBoardsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTaskBoardDto: UpdateTaskBoardDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateTaskBoardDto: UpdateTaskBoardDto,
+  ) {
     return this.taskBoardsService.update(+id, updateTaskBoardDto);
   }
 

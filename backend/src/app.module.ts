@@ -13,7 +13,18 @@ import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  imports: [UsersModule, AuthModule, WorkspacesModule, DocumentsModule, TaskBoardsModule, TasksModule, ChatModule, NotificationsModule, ActivityLogsModule, PrismaModule],
+  imports: [
+    UsersModule,
+    AuthModule,
+    WorkspacesModule,
+    DocumentsModule,
+    TaskBoardsModule,
+    TasksModule,
+    ChatModule,
+    NotificationsModule,
+    ActivityLogsModule,
+    PrismaModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
