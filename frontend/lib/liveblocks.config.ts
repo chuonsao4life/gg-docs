@@ -14,15 +14,13 @@ type Presence = {
   };
 };
 
-// Định nghĩa kiểu dữ liệu lưu trữ trong Storage (nếu có)
-type Storage = {
-};
-
 export const {
   suspense: {
     RoomProvider,
     useOthers,
-    useSelf,
     useUpdateMyPresence,
+    useSelf,
+    useRoom,
   },
-} = createRoomContext<Presence, Storage>(client);
+} = createRoomContext<Presence, {}>(client);
+export { client };
