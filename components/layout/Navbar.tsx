@@ -10,7 +10,7 @@ export function Navbar({ title = "Untitled document" }: { title?: string }) {
   const [name, setName] = useState(title)
 
   return (
-    <header className="flex h-16 items-center justify-between gap-4 border-b bg-background px-4">
+    <header className="flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm">Back</Button>
 

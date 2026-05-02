@@ -28,6 +28,17 @@ export function CommentPanel({ documentId }: { documentId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId])
 
+  // Listen for toolbar Add comment event
+  useEffect(() => {
+    function handler() {
+      if (currentUserRole === "viewer") return
+      setShowInput(true)
+    }
+    window.addEventListener("editor:addComment", handler as EventListener)
+    return () => window.removeEventListener("editor:addComment", handler as EventListener)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserRole])
+
   async function handleSubmit(content: string) {
     // No selection available: fromPos/toPos are null
     await commentService.createComment(documentId, { content, fromPos: null, toPos: null, user: { id: currentUser.id, username: currentUser.username } })
