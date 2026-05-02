@@ -8,12 +8,12 @@ export function CommentInput({
     onCancel,
     onSubmit,
     disabled,
-    selectedRange,
+    draftRange,
 }: {
     onCancel?: () => void
     onSubmit: (content: string) => void
     disabled?: boolean
-    selectedRange?: EditorSelectionRange | null
+    draftRange?: EditorSelectionRange | null
 }) {
     const [value, setValue] = useState("")
 
@@ -26,9 +26,9 @@ export function CommentInput({
 
     return (
         <div className="flex flex-col gap-2 p-4">
-            {selectedRange && (
+            {draftRange && (
                 <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                    Commenting on: "{selectedRange.text}"
+                    Commenting on: "{draftRange.text}"
                 </div>
             )}
             <textarea

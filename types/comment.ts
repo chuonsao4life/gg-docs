@@ -1,18 +1,19 @@
 export type CommentUser = {
     id: string
-    username?: string
-    email?: string
+    username: string
     avatar?: string
 }
 
-export type Comment = {
+export type DocumentComment = {
     id: string
+    documentId: string
     content: string
-    fromPos?: number | null
-    toPos?: number | null
-    selectedText?: string | null
+    selectedText: string
+    fromPos: number | null
+    toPos: number | null
     createdAt: string
     updatedAt?: string
     user: CommentUser
-    documentId: string
 }
+
+export type Comment = DocumentComment

@@ -28,7 +28,7 @@ export const commentService = {
         return all.filter((c) => c.documentId === documentId)
     },
 
-    async createComment(documentId: string, data: { content: string; fromPos?: number | null; toPos?: number | null; selectedText?: string | null; user?: any }) {
+    async createComment(documentId: string, data: { content: string; fromPos?: number | null; toPos?: number | null; selectedText?: string; user?: any }) {
         const all = load()
         const now = new Date().toISOString()
         const comment: Comment = {
@@ -36,7 +36,7 @@ export const commentService = {
             content: data.content,
             fromPos: data.fromPos ?? null,
             toPos: data.toPos ?? null,
-            selectedText: data.selectedText ?? null,
+            selectedText: data.selectedText ?? "",
             createdAt: now,
             updatedAt: now,
             user: data.user ?? { id: "user-1", username: "Member 4" },

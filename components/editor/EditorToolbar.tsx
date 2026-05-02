@@ -38,11 +38,11 @@ export function EditorToolbar(props: EditorToolbarProps) {
     const { activeMarks = {}, disabled } = props
 
     function handleAddComment() {
-        if (props.onAddComment) return props.onAddComment()
-        // fallback: emit global event so CommentPanel can listen
-        try {
-            window.dispatchEvent(new CustomEvent("editor:addComment"))
-        } catch { }
+        if (props.onAddComment) {
+            props.onAddComment()
+            return
+        }
+        console.log("Select text to add a comment")
     }
 
     return (
