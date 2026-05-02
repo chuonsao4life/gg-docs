@@ -2,17 +2,17 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { DocumentEditorShell } from "@/components/editor/DocumentEditorShell"
 
 type Props = {
-  params: {
-    documentId: string
-  }
+    params: Promise<{
+        documentId: string
+    }>
 }
 
-export default function Page({ params }: Props) {
-  const { documentId } = params
+export default async function Page({ params }: Props) {
+    const resolvedParams = await params
 
-  return (
-    <AppLayout documentId={documentId} title={"Untitled document - CoWork"}>
-      <DocumentEditorShell documentId={documentId} />
-    </AppLayout>
-  )
+    return (
+        <AppLayout documentId={resolvedParams.documentId} title={"Untitled document - CoWork"}>
+            <DocumentEditorShell documentId={resolvedParams.documentId} />
+        </AppLayout>
+    )
 }
