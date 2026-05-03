@@ -1,4 +1,4 @@
 {
-  "/editor/[docId]/page": "app/editor/[docId]/page.js",
+  "/documents/[documentId]/page": "app/documents/[documentId]/page.js",
   "/page": "app/page.js"
 }
