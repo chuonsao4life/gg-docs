@@ -4,11 +4,15 @@ import React, { ReactNode } from "react"
 import { Navbar } from "@/components/layout/Navbar"
 import EditorMenuBar from "@/components/editor/EditorMenuBar"
 import EditorDynamicToolbar from "@/components/editor/EditorDynamicToolbar"
+import { MarginControls } from "@/components/editor/MarginControls"
+import { PaginatedEditorShell } from "@/components/editor/PaginatedEditorShell"
+import { PageRuler } from "@/components/editor/PageRuler"
 import { useState } from "react"
 import type { EditorMenuKey } from "@/types/editor-menu"
 import type { EditorToolbarActions, EditorToolbarState } from "@/types/editor-toolbar"
 import type { EditorSelectionRange } from "@/types/editor-selection"
 import type { DocumentComment } from "@/types/comment"
+import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { CommentPanel } from "@/components/comments/CommentPanel"
 
@@ -28,6 +32,8 @@ export function AppLayout({
     const [isComposerOpen, setIsComposerOpen] = useState(false)
     const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
     const [commentDraftRange, setCommentDraftRange] = useState<EditorSelectionRange | null>(null)
+    const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
+    const [showMarginControls, setShowMarginControls] = useState(false)
 
     const handleChangeMenu = (menu: EditorMenuKey) => {
         console.log("Active menu:", menu)
@@ -91,6 +97,7 @@ export function AppLayout({
         onInsertImage: () => console.log("insert image"),
         onInsertLink: () => console.log("insert link"),
         onAddComment: handleStartCommentFromSelection,
+        onToggleMarginControls: () => setShowMarginControls((visible) => !visible),
     }
 
     const toolbarState: EditorToolbarState = {
@@ -100,6 +107,7 @@ export function AppLayout({
         fontSize: "11",
         showRuler: false,
         showOutline: false,
+        showMarginControls,
         activeMarks: { bold: false, italic: false, underline: false },
         activeAlignment: "left",
     }
@@ -136,22 +144,20 @@ export function AppLayout({
                 <div className="flex flex-1 overflow-hidden">
                     <Sidebar />
 
-                    <main className="flex-1 overflow-auto bg-slate-50 p-6" style={{ height: 'calc(100vh - 56px - 72px)' }}>
-                        <div className="mx-auto w-full max-w-[900px] rounded-md">
-                            <div className="mx-auto max-w-[820px]">
-                                <div className="mx-auto w-full max-w-[820px]">
-                                    <div className="mx-auto w-full max-w-[820px]">
-                                        <div className="mx-auto w-full max-w-[820px] bg-transparent">
-                                            <div className="mx-auto w-full max-w-[820px]">
-                                                <div className="mx-auto w-full max-w-[820px]">
-                                                    <div className="mx-auto w-full max-w-[820px] rounded-md bg-white p-8 shadow-sm">
-                                                        {editorChildren}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <main className="flex-1 overflow-hidden bg-gray-100">
+                        <div className="flex h-full flex-col">
+                            <PageRuler margins={pageMargins} onMarginsChange={setPageMargins} />
+                            {showMarginControls && (
+                                <MarginControls margins={pageMargins} onChange={setPageMargins} />
+                            )}
+                            <div className="flex-1 overflow-auto">
+                                <PaginatedEditorShell
+                                    margins={pageMargins}
+                                    onMarginsChange={setPageMargins}
+                                    pageCount={2}
+                                >
+                                    {editorChildren}
+                                </PaginatedEditorShell>
                             </div>
                         </div>
                     </main>

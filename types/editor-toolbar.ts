@@ -16,6 +16,7 @@ export type EditorToolbarActions = {
     onToggleRuler?: () => void
     onToggleOutline?: () => void
     onFullScreen?: () => void
+    onToggleMarginControls?: () => void
 
     onInsertImage?: () => void
     onInsertLink?: () => void
@@ -58,6 +59,7 @@ export type EditorToolbarState = {
     fontSize?: string
     showRuler?: boolean
     showOutline?: boolean
+    showMarginControls?: boolean
     activeMarks?: {
         bold?: boolean
         italic?: boolean

@@ -10,6 +10,63 @@ const EDITOR_PARAGRAPHS = [
     "Project notes, meeting summaries, and review feedback can all live in this shared workspace.",
 ]
 
+type NormalizedCharMap = {
+    paragraphIndex: number
+    charIndex: number
+} | null
+
+type HighlightRange = {
+    id: string
+    type: "saved" | "draft"
+    start: number
+    end: number
+    comment: DocumentComment | null
+}
+
+function normalizeText(text: string) {
+    return text.replace(/\s+/g, " ").trim()
+}
+
+function buildNormalizedDocument(paragraphs: string[]) {
+    let normalized = ""
+    const map: NormalizedCharMap[] = []
+
+    function append(char: string, mappedChar: NormalizedCharMap) {
+        if (/\s/.test(char)) {
+            if (normalized.length > 0 && normalized[normalized.length - 1] !== " ") {
+                normalized += " "
+                map.push(mappedChar)
+            }
+            return
+        }
+
+        normalized += char
+        map.push(mappedChar)
+    }
+
+    paragraphs.forEach((paragraph, paragraphIndex) => {
+        if (paragraphIndex > 0 && normalized.length > 0 && normalized[normalized.length - 1] !== " ") {
+            normalized += " "
+            map.push(null)
+        }
+
+        Array.from(paragraph).forEach((char, charIndex) => {
+            append(char, { paragraphIndex, charIndex })
+        })
+    })
+
+    return { normalized: normalized.trim(), map }
+}
+
+function findMappedPoint(map: NormalizedCharMap[], index: number, direction: 1 | -1) {
+    let current = index
+    while (current >= 0 && current < map.length) {
+        if (map[current]) return map[current]
+        current += direction
+    }
+    return null
+}
+
 export function DocumentEditorShell({
     documentId,
     selectedRange,
@@ -112,57 +169,90 @@ export function DocumentEditorShell({
         return () => document.removeEventListener("pointerdown", handlePointerDown)
     }, [onSelectionChange])
 
-    function renderTextWithHighlights(text: string) {
+    function buildHighlightRanges() {
         const visibleDraftRange = draftRange ?? selectedRange
-        const savedMatches = comments
-            .map((comment) => ({
+        const normalizedDocument = buildNormalizedDocument(EDITOR_PARAGRAPHS)
+        const sources = [
+            ...comments.map((comment) => ({
                 id: comment.id,
+                type: "saved" as const,
                 text: comment.selectedText,
                 comment,
-                type: "saved" as const,
-                index: text.indexOf(comment.selectedText),
-            }))
-            .filter(({ comment, index }) => comment.selectedText && index >= 0)
-
-        const draftMatch = visibleDraftRange?.text
-            ? [{
+            })),
+            ...(visibleDraftRange?.text ? [{
                 id: "draft-comment-range",
                 text: visibleDraftRange.text,
                 comment: null,
                 type: "draft" as const,
-                index: text.indexOf(visibleDraftRange.text),
-            }].filter(({ index }) => index >= 0)
-            : []
+            }] : []),
+        ]
 
-        // TODO(Member 2): use Tiptap marks/decorations with commentId attribute for exact range mapping.
-        const matches = [...savedMatches, ...draftMatch].sort((a, b) => a.index - b.index)
+        const rangesByParagraph = new Map<number, HighlightRange[]>()
 
-        if (matches.length === 0) return text
+        for (const source of sources) {
+            const normalizedNeedle = normalizeText(source.text)
+            if (!normalizedNeedle) continue
+
+            // TODO(Member 2): replace mock text matching with Tiptap range decorations for exact multi-line selection.
+            const startIndex = normalizedDocument.normalized.indexOf(normalizedNeedle)
+            if (startIndex < 0) continue
+
+            const endIndex = startIndex + normalizedNeedle.length - 1
+            const startPoint = findMappedPoint(normalizedDocument.map, startIndex, 1)
+            const endPoint = findMappedPoint(normalizedDocument.map, endIndex, -1)
+            if (!startPoint || !endPoint) continue
+
+            for (let paragraphIndex = startPoint.paragraphIndex; paragraphIndex <= endPoint.paragraphIndex; paragraphIndex += 1) {
+                const paragraph = EDITOR_PARAGRAPHS[paragraphIndex]
+                const start = paragraphIndex === startPoint.paragraphIndex ? startPoint.charIndex : 0
+                const end = paragraphIndex === endPoint.paragraphIndex ? endPoint.charIndex + 1 : paragraph.length
+                if (start >= end) continue
+
+                const nextRange: HighlightRange = {
+                    id: source.id,
+                    type: source.type,
+                    start,
+                    end,
+                    comment: source.comment,
+                }
+
+                const ranges = rangesByParagraph.get(paragraphIndex) ?? []
+                ranges.push(nextRange)
+                rangesByParagraph.set(paragraphIndex, ranges)
+            }
+        }
+
+        return rangesByParagraph
+    }
+
+    function renderTextWithHighlights(text: string, paragraphIndex: number, rangesByParagraph: Map<number, HighlightRange[]>) {
+        const ranges = (rangesByParagraph.get(paragraphIndex) ?? []).sort((a, b) => a.start - b.start)
+        if (ranges.length === 0) return text
 
         const parts: React.ReactNode[] = []
         let cursor = 0
 
-        for (const match of matches) {
-            const { comment, id, index, text: matchedText, type } = match
-            if (index < cursor) continue
+        for (const range of ranges) {
+            const { comment, id, start, end, type } = range
+            if (start < cursor) continue
 
-            if (index > cursor) {
-                parts.push(text.slice(cursor, index))
+            if (start > cursor) {
+                parts.push(text.slice(cursor, start))
             }
 
             const isActive = comment?.id === activeCommentId
             const isDraft = type === "draft"
             parts.push(
                 <span
-                    key={id}
+                    key={`${id}-${paragraphIndex}-${start}-${end}`}
                     data-comment-id={comment?.id}
-                    role="button"
-                    tabIndex={0}
+                    role={comment ? "button" : undefined}
+                    tabIndex={comment ? 0 : undefined}
                     className={[
-                        "cursor-pointer rounded px-0.5 text-inherit transition",
-                        isDraft ? "bg-sky-100 ring-1 ring-sky-300" : "",
+                        "rounded px-0.5 text-inherit transition",
+                        isDraft ? "cursor-default bg-sky-100 ring-1 ring-sky-300" : "",
                         isActive ? "bg-blue-200 ring-1 ring-blue-400" : "",
-                        !isDraft && !isActive ? "bg-yellow-200 hover:bg-yellow-300" : "",
+                        !isDraft && !isActive ? "cursor-pointer bg-yellow-200 hover:bg-yellow-300" : "",
                     ].join(" ")}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={(event) => {
@@ -177,10 +267,10 @@ export function DocumentEditorShell({
                         }
                     }}
                 >
-                    {matchedText}
+                    {text.slice(start, end)}
                 </span>
             )
-            cursor = index + matchedText.length
+            cursor = end
         }
 
         if (cursor < text.length) {
@@ -190,38 +280,38 @@ export function DocumentEditorShell({
         return parts
     }
 
+    const rangesByParagraph = buildHighlightRanges()
+
     return (
-        <div>
+        <div className="relative min-h-[760px]">
+            <FloatingCommentButton visible={Boolean(selectedRange)} onClick={onStartComment ?? (() => undefined)} />
+
             <div className="mb-4 flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">Document ID: {documentId}</div>
             </div>
 
-            <div className="relative min-h-[640px] rounded border bg-white p-8 shadow-sm">
-                <FloatingCommentButton visible={Boolean(selectedRange)} onClick={onStartComment ?? (() => undefined)} />
-
-                <div
-                    ref={editorRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    spellCheck={false}
-                    onMouseUp={updateSelectionFromMouse}
-                    onKeyUp={updateSelectionFromKeyboard}
-                    className="editor-placeholder min-h-[420px] whitespace-pre-wrap text-sm leading-7 text-foreground outline-none"
-                >
-                    <div className="text-lg text-muted-foreground">Start writing here...</div>
-                    {EDITOR_PARAGRAPHS.map((paragraph, index) => (
-                        <p key={paragraph} className={index === 0 ? "mt-6" : "mt-4"}>
-                            {renderTextWithHighlights(paragraph)}
-                        </p>
-                    ))}
-                </div>
-                <style jsx>{`
-                    .editor-placeholder ::selection {
-                        background-color: rgba(96, 165, 250, 0.25);
-                        color: inherit;
-                    }
-                `}</style>
+            <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                spellCheck={false}
+                onMouseUp={updateSelectionFromMouse}
+                onKeyUp={updateSelectionFromKeyboard}
+                className="editor-placeholder min-h-[640px] whitespace-pre-wrap text-sm leading-7 text-foreground outline-none"
+            >
+                <div className="text-lg text-muted-foreground">Start writing here...</div>
+                {EDITOR_PARAGRAPHS.map((paragraph, index) => (
+                    <p key={paragraph} className={index === 0 ? "mt-6" : "mt-4"}>
+                        {renderTextWithHighlights(paragraph, index, rangesByParagraph)}
+                    </p>
+                ))}
             </div>
+            <style jsx>{`
+                .editor-placeholder ::selection {
+                    background-color: rgba(96, 165, 250, 0.25);
+                    color: inherit;
+                }
+            `}</style>
         </div>
     )
 }
