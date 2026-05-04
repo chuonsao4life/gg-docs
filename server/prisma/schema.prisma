@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String       @id @default(uuid())
+  email          String       @unique
+  hashedPassword String
+  username       String       @unique
+  firstname      String
+  lastname       String
+  avatar         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  ownedDocs      Document[]   @relation("DocumentOwner")
+  permissions    Permission[]
+  comments       Comment[]
+  snapshots      Snapshot[]
+}
+
+model Document {
+  id          String       @id @default(uuid())
+  title       String       @db.VarChar(200)
+  
+  ownerId     String
+  owner       User         @relation("DocumentOwner", fields: [ownerId], references: [id])
+
+  isPublic    Boolean      @default(false)
+  publicRole  String?      
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  permissions Permission[]
+  comments    Comment[]
+  snapshots   Snapshot[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  role        String   
+  grantedAt   DateTime @default(now())
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentId])
+}
+
+model Snapshot {
+  id           String   @id @default(uuid())
+  version      Int      @default(1)
+  
+  snapshotData Bytes    
+
+  createdAt    DateTime @default(now())
+
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdBy    String
+  user         User     @relation(fields: [createdBy], references: [id])
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  content     String   @db.Text
+  
+  fromPos     Int?
+  toPos       Int?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
