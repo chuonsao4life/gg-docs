@@ -283,7 +283,7 @@ export function DocumentEditorShell({
     const rangesByParagraph = buildHighlightRanges()
 
     return (
-        <div className="relative min-h-[760px]">
+        <div className="relative min-h-\[760px\]">
             <FloatingCommentButton visible={Boolean(selectedRange)} onClick={onStartComment ?? (() => undefined)} />
 
             <div className="mb-4 flex items-center justify-between">
@@ -297,7 +297,7 @@ export function DocumentEditorShell({
                 spellCheck={false}
                 onMouseUp={updateSelectionFromMouse}
                 onKeyUp={updateSelectionFromKeyboard}
-                className="editor-placeholder min-h-[640px] whitespace-pre-wrap text-sm leading-7 text-foreground outline-none"
+                className="editor-placeholder min-h-\[640px\] whitespace-pre-wrap text-sm leading-7 text-foreground outline-none"
             >
                 <div className="text-lg text-muted-foreground">Start writing here...</div>
                 {EDITOR_PARAGRAPHS.map((paragraph, index) => (
