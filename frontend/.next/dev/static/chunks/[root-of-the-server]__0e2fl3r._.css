@@ -722,10 +722,6 @@
     bottom: 25%;
   }
 
-  .bottom-4 {
-    bottom: calc(var(--spacing) * 4);
-  }
-
   .bottom-6 {
     bottom: calc(var(--spacing) * 6);
   }
@@ -2107,10 +2103,6 @@
     background-color: var(--color-bg);
   }
 
-  .bg-\[\#F8F9FA\] {
-    background-color: #f8f9fa;
-  }
-
   .bg-accent {
     background-color: var(--accent);
   }
@@ -2967,6 +2959,10 @@
 
   .text-white {
     color: var(--color-white);
+  }
+
+  .lowercase {
+    text-transform: lowercase;
   }
 
   .italic {
