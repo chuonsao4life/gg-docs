@@ -1,14 +1,19 @@
 'use client'
 
-import { use, useEffect, useMemo } from "react" // Thêm useEffect
+import { use, useEffect, useMemo } from "react" 
 import { AppLayout } from "@/components/layout/AppLayout"
 import { DocumentEditorContainer } from "@/components/editor/DocumentEditorContainer"
-import { RoomProvider, useRoom } from "@/lib/liveblocks.config" // Thêm useRoom
+import { RoomProvider, useRoom, useSelf } from "@/lib/liveblocks.config"
 import { ClientSideSuspense } from "@liveblocks/react"
 import { useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import { LiveblocksYjsProvider } from "@liveblocks/yjs" // Thêm Provider này
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import History from '@tiptap/extension-history'
+import TextStyle from '@tiptap/extension-text-style'
+import Placeholder from '@tiptap/extension-placeholder'
+import Underline from '@tiptap/extension-underline'
+import { LiveblocksYjsProvider } from "@liveblocks/yjs" 
 import * as Y from 'yjs'
 
 type Props = {
@@ -20,6 +25,8 @@ type Props = {
 function DocumentPageContent({ documentId }: { documentId: string }) {
     const room = useRoom()
     const doc = useMemo(() => new Y.Doc(), [])
+
+    const userInfo = useSelf((me) => me.info) as any;
     useEffect(() => {
         if (!room || !doc) return;
         const yProvider = new LiveblocksYjsProvider(room, doc)
@@ -34,11 +41,25 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     const editor = useEditor({
         extensions: [
             StarterKit.configure({ history: false } as any),
+            History,
             Collaboration.configure({ document: doc }),
+            room && userInfo ? CollaborationCursor.configure({
+                    provider: room as any,
+                    user: {
+                        name: userInfo?.name,
+                        color: userInfo?.color,
+                    },
+                }) : null,
+
+            TextStyle,
+            Placeholder.configure({
+                placeholder: "Start writing your document...",
+            }), 
+            Underline,
         ],
         immediatelyRender: false,
-        shouldRerenderOnTransaction: true,
-    }, [doc]);
+        shouldRerenderOnTransaction: false,
+    }, [doc, room, userInfo ]);
 
     return (
         <AppLayout 

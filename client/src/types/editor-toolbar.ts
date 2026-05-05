@@ -30,7 +30,7 @@ export type EditorToolbarActions = {
     onBold?: () => void
     onItalic?: () => void
     onUnderline?: () => void
-    onTextColor?: () => void
+    onTextColor?: () => void      
     onHighlightColor?: () => void
     onAlignLeft?: () => void
     onAlignCenter?: () => void
@@ -59,6 +59,8 @@ export type EditorToolbarState = {
     fontSize?: string
     showRuler?: boolean
     showOutline?: boolean
+    canUndo?: boolean
+    canRedo?: boolean
     showMarginControls?: boolean
     activeMarks?: {
         bold?: boolean
