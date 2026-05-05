@@ -15,6 +15,7 @@ import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 import { CommentPanel } from "@/components/comments/CommentPanel"
 import { createDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
 
+
 export function AppLayout({
     children,
     documentId,
@@ -125,7 +126,13 @@ export function AppLayout({
         showRuler: false,
         showOutline: false,
         showMarginControls,
-        activeMarks: { bold: editor?.isActive("bold") || false, italic: editor?.isActive("italic") || false, underline: editor?.isActive("underline") || false },
+        canUndo: editor?.can().undo() || false,
+        canRedo: editor?.can().redo() || false,
+        activeMarks: { 
+            bold: editor?.isActive("bold") || false, 
+            italic: editor?.isActive("italic") || false, 
+            underline: editor?.isActive("underline") || false, 
+        },
         activeAlignment: "left",
     }
 
