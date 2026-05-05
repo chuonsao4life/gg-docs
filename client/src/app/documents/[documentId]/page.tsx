@@ -9,7 +9,6 @@ import { useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import History from '@tiptap/extension-history'
 import TextStyle from '@tiptap/extension-text-style'
 import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
@@ -26,28 +25,36 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     const room = useRoom()
     const doc = useMemo(() => new Y.Doc(), [])
 
+    const yProvider = useMemo(() => {
+        if (!room || !doc) return null;
+        return new LiveblocksYjsProvider(room, doc);
+    }, [room, doc]);
+
     const userInfo = useSelf((me) => me.info) as any;
+
     useEffect(() => {
-        if (!room || !doc) return;
-        const yProvider = new LiveblocksYjsProvider(room, doc)
+        if (!yProvider) return;
+
         yProvider.on("sync", (isSynced: boolean) => {
             console.log("Trạng thái đồng bộ:", isSynced);
         });
+
         return () => {
             yProvider.destroy();
         }
-    }, [room, doc])
+    }, [yProvider])
+
+    //console.log("Check:", { room: !!room, user: !!userInfo, provider: !!yProvider })
 
     const editor = useEditor({
         extensions: [
             StarterKit.configure({ history: false } as any),
-            History,
             Collaboration.configure({ document: doc }),
-            room && userInfo ? CollaborationCursor.configure({
-                    provider: room as any,
+            room && userInfo && yProvider ? CollaborationCursor.configure({
+                    provider: yProvider as any,
                     user: {
                         name: userInfo?.name,
-                        color: userInfo?.color,
+                        color: userInfo?.color || '#ff5733',
                     },
                 }) : null,
 
@@ -58,8 +65,8 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
             Underline,
         ],
         immediatelyRender: false,
-        shouldRerenderOnTransaction: false,
-    }, [doc, room, userInfo ]);
+        shouldRerenderOnTransaction: true,
+    }, [doc, room, userInfo, yProvider]);
 
     return (
         <AppLayout 
