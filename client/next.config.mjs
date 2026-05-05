@@ -1,11 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
-}
+  /* config options here */
+  allowedDevOrigins: ['http://localhost:5000'],
+};
 
-export default nextConfig
+export default nextConfig;
