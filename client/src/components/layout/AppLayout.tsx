@@ -1,20 +1,19 @@
 "use client"
 
-import React, { ReactNode } from "react"
+import React, { ReactNode, useEffect, useState } from "react"
 import { Navbar } from "@/components/layout/Navbar"
 import EditorMenuBar from "@/components/editor/EditorMenuBar"
 import EditorDynamicToolbar from "@/components/editor/EditorDynamicToolbar"
 import { MarginControls } from "@/components/editor/MarginControls"
 import { PaginatedEditorShell } from "@/components/editor/PaginatedEditorShell"
 import { PageRuler } from "@/components/editor/PageRuler"
-import { useState } from "react"
 import type { EditorMenuKey } from "@/types/editor-menu"
 import type { EditorToolbarActions, EditorToolbarState } from "@/types/editor-toolbar"
 import type { EditorSelectionRange } from "@/types/editor-selection"
 import type { DocumentComment } from "@/types/comment"
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
-import { Sidebar } from "@/components/layout/Sidebar"
 import { CommentPanel } from "@/components/comments/CommentPanel"
+import { createDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
 
 export function AppLayout({
     children,
@@ -37,48 +36,64 @@ export function AppLayout({
     const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
     const [showMarginControls, setShowMarginControls] = useState(false)
 
+    useEffect(() => {
+        let active = true
+
+        listDocumentComments(documentId)
+            .then((nextComments) => {
+                if (active) setComments(nextComments)
+            })
+            .catch((error) => {
+                console.warn("Unable to load comments", error)
+            })
+
+        return () => {
+            active = false
+        }
+    }, [documentId])
+
     const handleChangeMenu = (menu: EditorMenuKey) => {
         console.log("Active menu:", menu)
         setActiveMenu(menu)
     }
 
     const handleStartCommentFromSelection = () => {
-        if (!selectedRange) {
-            console.log("Select text to add a comment")
-            return
+        const browserSelection = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : ""
+        const fallbackRange: EditorSelectionRange = {
+            from: 0,
+            to: browserSelection?.length || 0,
+            text: browserSelection || "Toàn bộ tài liệu",
         }
+        const nextRange = selectedRange || fallbackRange
 
         setIsCommentPanelOpen(true)
         setIsComposerOpen(true)
-        setCommentDraftRange(selectedRange)
+        setCommentDraftRange(nextRange)
         setSelectedRange(null)
         setActiveCommentId(null)
     }
 
-    const handleSubmitComment = (content: string) => {
+    const handleSubmitComment = async (content: string) => {
         const trimmedContent = content.trim()
         if (!commentDraftRange || !trimmedContent) return
 
-        const newComment: DocumentComment = {
-            id: String(Date.now()),
-            documentId,
-            content: trimmedContent,
-            selectedText: commentDraftRange.text,
-            fromPos: commentDraftRange.from,
-            toPos: commentDraftRange.to,
-            createdAt: new Date().toISOString(),
-            user: {
-                id: "user-1",
-                username: "Member 4",
-            },
-        }
+        try {
+            const newComment = await createDocumentComment(documentId, {
+                content: trimmedContent,
+                selectedText: commentDraftRange.text,
+                fromPos: commentDraftRange.from,
+                toPos: commentDraftRange.to,
+            })
 
-        setComments((prev) => [...prev, newComment])
-        setActiveCommentId(newComment.id)
-        setIsComposerOpen(false)
-        setIsCommentPanelOpen(true)
-        setSelectedRange(null)
-        setCommentDraftRange(null)
+            setComments((prev) => [...prev, newComment])
+            setActiveCommentId(newComment.id)
+            setIsComposerOpen(false)
+            setIsCommentPanelOpen(true)
+            setSelectedRange(null)
+            setCommentDraftRange(null)
+        } catch (error) {
+            console.warn("Unable to create comment", error)
+        }
     }
 
     const handleSelectComment = (commentId: string) => {
@@ -131,7 +146,13 @@ export function AppLayout({
     return (
         <div className="flex h-screen flex-col">
             <Navbar
+                key={`${documentId}-${title}`}
+                documentId={documentId}
                 title={title}
+                onExportPdf={() => window.print()}
+                onRename={async (nextTitle) => {
+                    await renameDashboardDocument(documentId, nextTitle)
+                }}
                 onToggleComments={() => {
                     setIsCommentPanelOpen((open) => !open)
                     setIsComposerOpen(false)
@@ -144,8 +165,6 @@ export function AppLayout({
                 <EditorDynamicToolbar activeMenu={activeMenu} actions={toolbarActions} state={toolbarState} />
 
                 <div className="flex flex-1 overflow-hidden">
-                    <Sidebar />
-
                     <main className="flex-1 overflow-hidden bg-gray-100">
                         <div className="flex h-full flex-col">
                             <PageRuler margins={pageMargins} onMarginsChange={setPageMargins} />

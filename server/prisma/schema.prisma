@@ -73,6 +73,7 @@ model Snapshot {
 model Comment {
   id          String   @id @default(uuid())
   content     String   @db.Text
+  selectedText String  @default("") @db.Text
   
   fromPos     Int?
   toPos       Int?

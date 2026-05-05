@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.routes.js';
+import documentRoutes from './routes/document.routes.js';
 const app = express();
 
 // Core middleware
@@ -27,7 +28,7 @@ app.get('/api/health', (_req, res) => {
 
 // TODO: mount feature routes here
 app.use('/api/auth', authRoutes);
-// app.use('/api/documents', require('./routes/document.routes'));
+app.use('/api/documents', documentRoutes);
 // app.use('/api/permissions', require('./routes/permission.routes'));
 // app.use('/api/snapshots', require('./routes/snapshot.routes'));
 // app.use('/api/comments', require('./routes/comment.routes'));

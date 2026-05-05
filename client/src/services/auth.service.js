@@ -1,4 +1,10 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const DEFAULT_API_URL = 'http://localhost:4000/api';
+
+const getApiBaseUrl = () => {
+  const raw = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
+  const trimmed = raw.replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+};
 
 const STORAGE_KEY = 'auth-session';
 const EVENT_NAME = 'auth-session';
@@ -34,6 +40,10 @@ export const storeSession = (state) => {
 
 export const clearSession = () => {
   storeSession(null);
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
 };
 
 export const onSessionChange = (handler) => {
@@ -53,7 +63,7 @@ const request = async (path, init = {}, token = null) => {
     ...(init.headers || {}),
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     credentials: 'include', // Giữ nguyên tùy chọn gửi cookie (nếu có) từ Code 2
     ...init,
     headers,
@@ -111,4 +121,32 @@ export const mockForgotPassword = async (email) => {
     method: 'POST', // Rút kinh nghiệm từ Code 2, định nghĩa rõ method
     body: JSON.stringify({ email }),
   });
+};
+
+export const getCurrentUser = async () => {
+  const session = readStoredSession();
+  return request('/auth/me', {}, session?.token);
+};
+
+export const updateCurrentUser = async (payload) => {
+  const session = readStoredSession();
+  const user = await request('/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, session?.token);
+
+  if (session) {
+    storeSession({ ...session, user });
+    localStorage.setItem('user', JSON.stringify(user));
+  }
+
+  return user;
+};
+
+export const changeCurrentUserPassword = async (payload) => {
+  const session = readStoredSession();
+  return request('/auth/me/password', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, session?.token);
 };

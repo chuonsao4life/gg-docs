@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Users, Mail, MapPin, Phone, Github, Linkedin } from "lucide-react"
+import { Users, Mail, MapPin, Phone, ExternalLink } from "lucide-react"
 
 const teamMembers = [
   {
@@ -43,10 +43,10 @@ export function Footer() {
             </p>
             <div className="flex gap-3">
               <Link href="#" className="rounded-md p-2 transition-colors hover:bg-sidebar-accent">
-                <Github className="h-5 w-5" />
+                <ExternalLink className="h-5 w-5" />
               </Link>
               <Link href="#" className="rounded-md p-2 transition-colors hover:bg-sidebar-accent">
-                <Linkedin className="h-5 w-5" />
+                <ExternalLink className="h-5 w-5" />
               </Link>
             </div>
           </div>

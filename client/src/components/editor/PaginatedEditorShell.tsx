@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 
 type PaginatedEditorShellProps = {
@@ -33,16 +33,16 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
     const rulerRef = useRef<HTMLDivElement | null>(null)
     const [draggingHandle, setDraggingHandle] = useState<"top" | "bottom" | null>(null)
 
-    function getPageY(clientY: number) {
+    const getPageY = useCallback((clientY: number) => {
         const ruler = rulerRef.current
         if (!ruler) return 0
 
         const rect = ruler.getBoundingClientRect()
         const y = Math.min(rect.height, Math.max(0, clientY - rect.top))
         return (y / rect.height) * pageHeight
-    }
+    }, [pageHeight])
 
-    function updateVerticalMargin(handle: "top" | "bottom", clientY: number) {
+    const updateVerticalMargin = useCallback((handle: "top" | "bottom", clientY: number) => {
         if (!onMarginsChange) return
 
         const pageY = getPageY(clientY)
@@ -54,7 +54,7 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
             ...margins,
             [handle]: nextMargin,
         })
-    }
+    }, [getPageY, margins, onMarginsChange, pageHeight])
 
     useEffect(() => {
         if (!draggingHandle) return
@@ -75,7 +75,7 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
             window.removeEventListener("pointermove", handlePointerMove)
             window.removeEventListener("pointerup", handlePointerUp)
         }
-    }, [draggingHandle, margins, onMarginsChange, pageHeight])
+    }, [draggingHandle, updateVerticalMargin])
 
     return (
         <div

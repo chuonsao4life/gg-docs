@@ -15,7 +15,7 @@ import {
   Video,
 } from "lucide-react"
 
-const events = [
+const INITIAL_EVENTS = [
   {
     id: 1,
     title: "Sprint Planning Meeting",
@@ -96,6 +96,15 @@ const priorityLabels = {
 
 export function CalendarSection() {
   const [currentDate] = useState(new Date())
+  const [events, setEvents] = useState(INITIAL_EVENTS)
+  const [showEventForm, setShowEventForm] = useState(false)
+  const [newEvent, setNewEvent] = useState({
+    title: "",
+    start: "",
+    end: "",
+    location: "",
+    isOnline: true,
+  })
   
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("vi-VN", {
@@ -107,7 +116,7 @@ export function CalendarSection() {
   }
 
   return (
-    <section className="py-8">
+    <section id="calendar" className="py-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Lịch & Công việc</h2>
@@ -115,11 +124,76 @@ export function CalendarSection() {
             Quản lý thời gian và deadline của bạn
           </p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowEventForm((visible) => !visible)}>
           <Plus className="h-4 w-4" />
           Thêm sự kiện
         </Button>
       </div>
+
+      {showEventForm && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <form
+              className="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_1fr_auto]"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!newEvent.title.trim()) return
+
+                setEvents((currentEvents) => [
+                  ...currentEvents,
+                  {
+                    id: Date.now(),
+                    title: newEvent.title.trim(),
+                    time: `${newEvent.start || "09:00"} - ${newEvent.end || "10:00"}`,
+                    type: "meeting",
+                    color: "bg-primary",
+                    location: newEvent.location.trim() || (newEvent.isOnline ? "Google Meet" : "Phòng họp"),
+                    isOnline: newEvent.isOnline,
+                    attendees: [{ name: "Bạn", initials: "BT" }],
+                  },
+                ])
+                setNewEvent({ title: "", start: "", end: "", location: "", isOnline: true })
+                setShowEventForm(false)
+              }}
+            >
+              <input
+                value={newEvent.title}
+                onChange={(event) => setNewEvent((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Tên sự kiện"
+                className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                required
+              />
+              <input
+                value={newEvent.start}
+                onChange={(event) => setNewEvent((prev) => ({ ...prev, start: event.target.value }))}
+                type="time"
+                className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              />
+              <input
+                value={newEvent.end}
+                onChange={(event) => setNewEvent((prev) => ({ ...prev, end: event.target.value }))}
+                type="time"
+                className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              />
+              <input
+                value={newEvent.location}
+                onChange={(event) => setNewEvent((prev) => ({ ...prev, location: event.target.value }))}
+                placeholder="Địa điểm hoặc link"
+                className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              />
+              <Button type="submit">Tạo</Button>
+            </form>
+            <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={newEvent.isOnline}
+                onChange={(event) => setNewEvent((prev) => ({ ...prev, isOnline: event.target.checked }))}
+              />
+              Sự kiện online
+            </label>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Today's Schedule */}

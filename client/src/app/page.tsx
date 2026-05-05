@@ -1,7 +1,6 @@
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { HeroSection } from "@/components/hero-section";
-import { FeaturesSection } from "@/components/features-section";
 import { TemplatesSection } from "@/components/templates-section";
 import { RecentDocuments } from "@/components/recent-documents";
 import { WorkspacesSection } from "@/components/workspaces-section";
@@ -16,7 +15,6 @@ export default function Home() {
       <main className="flex-1">
         <div className="container mx-auto px-4">
           <HeroSection />
-          <FeaturesSection />
           <TemplatesSection />
           <RecentDocuments />
           <WorkspacesSection />

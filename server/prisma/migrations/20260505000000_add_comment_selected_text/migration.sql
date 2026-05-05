@@ -1,0 +1,1 @@
+ALTER TABLE "Comment" ADD COLUMN "selectedText" TEXT NOT NULL DEFAULT '';

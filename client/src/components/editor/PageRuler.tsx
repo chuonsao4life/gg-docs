@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { PageMargins } from "@/types/page-layout"
 
 const PAGE_WIDTH = 794
@@ -31,16 +31,16 @@ export function PageRuler({
     const leftPercent = Math.min(100, Math.max(0, (margins.left / pageWidth) * 100))
     const rightPercent = Math.min(100, Math.max(0, ((pageWidth - margins.right) / pageWidth) * 100))
 
-    function getPageX(clientX: number) {
+    const getPageX = useCallback((clientX: number) => {
         const ruler = rulerRef.current
         if (!ruler) return 0
 
         const rect = ruler.getBoundingClientRect()
         const x = Math.min(rect.width, Math.max(0, clientX - rect.left))
         return (x / rect.width) * pageWidth
-    }
+    }, [pageWidth])
 
-    function updateHorizontalMargin(handle: "left" | "right", clientX: number) {
+    const updateHorizontalMargin = useCallback((handle: "left" | "right", clientX: number) => {
         const pageX = getPageX(clientX)
         const nextMargin = handle === "left"
             ? clampMargin(pageX)
@@ -50,7 +50,7 @@ export function PageRuler({
             ...margins,
             [handle]: nextMargin,
         })
-    }
+    }, [getPageX, margins, onMarginsChange, pageWidth])
 
     useEffect(() => {
         if (!draggingHandle) return
@@ -71,7 +71,7 @@ export function PageRuler({
             window.removeEventListener("pointermove", handlePointerMove)
             window.removeEventListener("pointerup", handlePointerUp)
         }
-    }, [draggingHandle, margins, onMarginsChange, pageWidth])
+    }, [draggingHandle, updateHorizontalMargin])
 
     return (
         <div className="border-b bg-white px-4 py-2">

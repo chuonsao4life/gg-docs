@@ -37,7 +37,7 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden items-center gap-1 md:flex">
-          <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <Link href="/dashboard" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
             <FileText className="h-4 w-4" />
             Tài liệu
           </Link>
@@ -45,7 +45,7 @@ export function Header() {
             <LayoutGrid className="h-4 w-4" />
             Workspace
           </Link>
-          <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <Link href="/#calendar" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
             <Calendar className="h-4 w-4" />
             Lịch
           </Link>
@@ -98,8 +98,15 @@ export function Header() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Tài khoản của tôi</DropdownMenuItem>
-              <DropdownMenuItem>Cài đặt</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings">Tài khoản của tôi</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard">Dashboard tài liệu</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings">Cài đặt</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem>Trợ giúp</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive">Đăng xuất</DropdownMenuItem>
@@ -132,7 +139,7 @@ export function Header() {
             </div>
           </div>
           <nav className="flex flex-col gap-1">
-            <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary">
+            <Link href="/dashboard" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary">
               <FileText className="h-4 w-4" />
               Tài liệu
             </Link>
@@ -140,7 +147,7 @@ export function Header() {
               <LayoutGrid className="h-4 w-4" />
               Workspace
             </Link>
-            <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary">
+            <Link href="/#calendar" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary">
               <Calendar className="h-4 w-4" />
               Lịch
             </Link>

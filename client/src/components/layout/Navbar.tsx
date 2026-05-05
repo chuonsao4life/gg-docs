@@ -1,48 +1,98 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Download, FileText, MessageSquareText } from "lucide-react"
+import { ShareDialog } from "@/components/editor/ShareDialog"
 
-export function Navbar({ title = "Untitled document", onToggleComments }: { title?: string; onToggleComments?: () => void }) {
+export function Navbar({
+    documentId,
+    title = "Untitled document",
+    onExportPdf,
+    onRename,
+    onToggleComments,
+}: {
+    documentId: string
+    title?: string
+    onExportPdf?: () => void
+    onRename?: (title: string) => Promise<void> | void
+    onToggleComments?: () => void
+}) {
     const [saving] = useState(false)
     const [editing, setEditing] = useState(false)
     const [name, setName] = useState(title)
 
-    return (
-        <header className="flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm">Back</Button>
+    async function commitName() {
+        const nextName = name.trim() || title
+        setName(nextName)
+        setEditing(false)
+        if (nextName !== title) {
+            await onRename?.(nextName)
+        }
+    }
 
-                <div className="flex flex-col">
+    return (
+        <header className="flex h-16 items-center justify-between gap-4 border-b bg-white px-4">
+            <div className="flex min-w-0 items-center gap-3">
+                <Link
+                    href="/dashboard"
+                    title="Về dashboard"
+                    className="flex h-10 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90"
+                >
+                    <FileText className="h-6 w-6" />
+                </Link>
+
+                <div className="flex min-w-0 flex-col">
                     {editing ? (
                         <input
-                            className="w-64 rounded-md border px-2 py-1 text-sm font-semibold"
+                            className="w-64 max-w-[55vw] rounded-md border px-2 py-1 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            onBlur={() => setEditing(false)}
+                            onBlur={commitName}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                    event.preventDefault()
+                                    event.currentTarget.blur()
+                                }
+                            }}
                         />
                     ) : (
-                        <div className="flex items-baseline gap-2">
-                            <h1 className="cursor-text text-lg font-semibold" onClick={() => setEditing(true)}>{name}</h1>
-                            <span className="text-xs text-muted-foreground">{saving ? "Saving..." : "Saved"}</span>
+                        <div className="flex min-w-0 items-baseline gap-2">
+                            <h1
+                                className="max-w-[48vw] cursor-text truncate text-lg font-medium text-slate-800"
+                                onClick={() => {
+                                    setEditing(true)
+                                }}
+                            >
+                                {name}
+                            </h1>
+                            <span className="hidden text-xs text-slate-500 sm:inline">{saving ? "Đang lưu..." : "Đã lưu"}</span>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className="flex items-center gap-3">
-                <button className="flex items-center gap-2 rounded-md bg-primary px-3 py-1 text-sm text-white hover:brightness-95">Share</button>
+            <div className="flex shrink-0 items-center gap-2">
+                <button
+                    type="button"
+                    onClick={onExportPdf}
+                    className="hidden h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-700 transition hover:bg-slate-100 md:flex"
+                >
+                    <Download className="h-4 w-4" />
+                    Xuất PDF
+                </button>
                 <button
                     type="button"
                     onClick={onToggleComments}
-                    className="hidden items-center gap-2 rounded-md bg-muted px-2 py-1 text-sm md:flex"
+                    className="hidden h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-700 transition hover:bg-slate-100 md:flex"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 10l5 5 5-5" /></svg>
-                    Comments
+                    <MessageSquareText className="h-4 w-4" />
+                    Bình luận
                 </button>
+                <ShareDialog documentId={documentId} />
                 <Avatar className="h-8 w-8">
-                    <AvatarFallback>M4</AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground">M4</AvatarFallback>
                 </Avatar>
             </div>
         </header>

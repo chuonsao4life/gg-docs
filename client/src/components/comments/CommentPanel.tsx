@@ -31,11 +31,11 @@ export function CommentPanel({
     return (
         <aside data-comment-panel className="flex h-full flex-col border-l bg-muted">
             <div className="flex items-center justify-between border-b bg-background px-4 py-3">
-                <div className="text-sm font-semibold">Comments</div>
+                <div className="text-sm font-semibold">Bình luận</div>
                 <button
                     type="button"
-                    aria-label="Close comments"
-                    title="Close comments"
+                    aria-label="Đóng bình luận"
+                    title="Đóng bình luận"
                     onClick={onClose}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
                 >
@@ -55,7 +55,7 @@ export function CommentPanel({
 
             <div className="flex-1 overflow-auto">
                 {comments.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">No comments yet.</div>
+                    <div className="p-6 text-center text-sm text-muted-foreground">Chưa có bình luận.</div>
                 ) : (
                     comments.map((comment) => (
                         <CommentItem

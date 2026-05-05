@@ -4,7 +4,7 @@ import React from "react"
 import { Editor } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Bold, Italic, Underline, Undo, Redo, Image, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus } from "lucide-react"
+import { Bold, Italic, Underline, Undo, Redo, Image as ImageIcon, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus } from "lucide-react"
 
 export type EditorToolbarProps = {
     editor: Editor | null
@@ -111,7 +111,7 @@ export function EditorToolbar(props: EditorToolbarProps) {
                 <Separator orientation="vertical" />
 
                 <div className="flex items-center gap-2">
-                    <button title="Image" aria-label="Image" className={smallBtnProps()} onClick={() => props.onImage && props.onImage()} disabled={disabled}><Image className="h-4 w-4" /></button>
+                    <button title="Image" aria-label="Image" className={smallBtnProps()} onClick={() => props.onImage && props.onImage()} disabled={disabled}><ImageIcon className="h-4 w-4" /></button>
                     <button title="Align" aria-label="Align" className={smallBtnProps()} onClick={() => props.onAlignLeft && props.onAlignLeft()} disabled={disabled}><AlignLeft className="h-4 w-4" /></button>
                     <button title="Line spacing" aria-label="Line spacing" className={smallBtnProps()}><Minus className="h-4 w-4" /></button>
                     <button title="Checklist" aria-label="Checklist" className={smallBtnProps()} onClick={() => props.onChecklist && props.onChecklist()} disabled={disabled}><CheckSquare className="h-4 w-4" /></button>

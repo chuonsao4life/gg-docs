@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: collab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: collab_docs
+    ports:
+      - "5432:5432"
+    volumes:
+      - collab_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  collab_postgres_data:

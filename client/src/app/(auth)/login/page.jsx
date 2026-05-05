@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginUser } from '../../../services/auth.service';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get('registered') === '1';
@@ -28,7 +28,10 @@ export default function LoginPage() {
       // Persist token + basic user
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      router.push('/dashboard');
+      
+      // Chuyển hướng về trang cũ nếu có, nếu không thì về dashboard
+      const redirectPath = searchParams.get('redirect');
+      router.push(redirectPath || '/dashboard');
     } catch (err) {
       setError(err.message || 'Unable to log in.');
     } finally {
@@ -102,5 +105,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="bg-white rounded-2xl shadow-xl p-8 text-sm text-slate-500">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

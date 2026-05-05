@@ -31,7 +31,7 @@ export function CommentItem({
             onClick={onClick}
             className={[
                 "flex w-full gap-3 border-b border-l-4 px-4 py-3 text-left transition",
-                isActive ? "border-l-blue-500 border-b-blue-100 bg-blue-50 ring-1 ring-blue-100" : "border-l-transparent bg-background hover:bg-gray-50",
+                isActive ? "border-l-primary border-b-primary/20 bg-primary/10 ring-1 ring-primary/20" : "border-l-transparent bg-background hover:bg-muted/60",
             ].join(" ")}
         >
             <Avatar className="h-8 w-8 shrink-0">
@@ -44,7 +44,7 @@ export function CommentItem({
                     <div className="shrink-0 text-xs text-muted-foreground">{new Date(comment.createdAt).toLocaleString()}</div>
                 </div>
                 <div className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                    "{comment.selectedText}"
+                    &quot;{comment.selectedText}&quot;
                 </div>
                 <div className="mt-2 text-sm text-foreground">{comment.content}</div>
             </div>
