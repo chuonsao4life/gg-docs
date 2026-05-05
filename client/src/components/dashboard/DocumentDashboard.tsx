@@ -39,7 +39,23 @@ export function DocumentDashboard() {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [userInitials, setUserInitials] = useState("T")
+  const [authChecked, setAuthChecked] = useState(false)
   const localDraftCounter = useRef(0)
+
+  // Auth guard: Kiểm tra đăng nhập trước khi hiển thị dashboard
+  useEffect(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem("auth-session") : null
+    let token: string | null = null
+    if (raw) {
+      try { token = JSON.parse(raw)?.token || null } catch { token = null }
+    }
+    
+    if (!token) {
+      router.push("/login?redirect=/dashboard")
+      return
+    }
+    setAuthChecked(true)
+  }, [router])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setUserInitials(getInitials()), 0)
@@ -100,17 +116,7 @@ export function DocumentDashboard() {
     return (essentialTemplates.length > 0 ? essentialTemplates : templates).slice(0, 4)
   }, [templates])
 
-  const checkAuthAndNavigate = (targetPath: string) => {
-    if (!isUserAuthenticated()) {
-      router.push(`/login?redirect=${encodeURIComponent(targetPath)}`)
-      return false
-    }
-    return true
-  }
-
   async function handleCreateDocument(templateId: string) {
-    if (!checkAuthAndNavigate("/dashboard")) return
-
     setCreatingTemplateId(templateId)
     setNotice("")
     try {
@@ -127,10 +133,18 @@ export function DocumentDashboard() {
   }
 
   const handleOpenDocument = (docId: string) => {
-    const path = `/documents/${docId}`
-    if (checkAuthAndNavigate(path)) {
-      router.push(path)
-    }
+    router.push(`/documents/${docId}`)
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white text-slate-900 font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="text-sm font-medium">Đang tải ứng dụng...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
