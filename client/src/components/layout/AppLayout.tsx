@@ -86,6 +86,20 @@ export function AppLayout({
                 toPos: commentDraftRange.to,
             })
 
+            if (
+                editor &&
+                newComment.fromPos !== null &&
+                newComment.toPos !== null &&
+                newComment.fromPos < newComment.toPos
+            ) {
+                editor
+                    .chain()
+                    .focus()
+                    .setTextSelection({ from: newComment.fromPos, to: newComment.toPos })
+                    .setMark("comment", { commentId: newComment.id })
+                    .run()
+            }
+
             setComments((prev) => [...prev, newComment])
             setActiveCommentId(newComment.id)
             setIsComposerOpen(false)

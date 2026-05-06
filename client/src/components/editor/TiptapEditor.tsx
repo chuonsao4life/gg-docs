@@ -1,7 +1,8 @@
 'use client'
 
 import { Editor, EditorContent } from '@tiptap/react'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import type { MouseEvent } from 'react'
 import { FloatingCommentButton } from '@/components/comments/FloatingCommentButton'
 import type { DocumentComment } from '@/types/comment'
 import type { EditorSelectionRange } from '@/types/editor-selection'
@@ -20,9 +21,13 @@ type TiptapEditorProps = {
 export default function TiptapEditor({
   editor,
   selectedRange,
+  activeCommentId,
   onSelectionChange,
   onStartComment,
+  onSelectComment,
 }: TiptapEditorProps) {
+  const editorWrapperRef = useRef<HTMLDivElement>(null)
+
   const emitSelection = useCallback(() => {
     if (!editor) {
       onSelectionChange?.(null)
@@ -52,10 +57,36 @@ export default function TiptapEditor({
     }
   }, [editor, emitSelection, onSelectionChange])
 
+  useEffect(() => {
+    const wrapper = editorWrapperRef.current
+    if (!wrapper) return
+
+    wrapper.querySelectorAll<HTMLElement>("[data-comment-id]").forEach((element) => {
+      const isActive = Boolean(activeCommentId) && element.dataset.commentId === activeCommentId
+      if (isActive) {
+        element.dataset.activeComment = "true"
+      } else {
+        delete element.dataset.activeComment
+      }
+    })
+  }, [activeCommentId])
+
+  const handleEditorClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+
+    const commentElement = target.closest<HTMLElement>("[data-comment-id]")
+    const commentId = commentElement?.dataset.commentId
+    if (!commentId) return
+
+    event.preventDefault()
+    onSelectComment?.(commentId)
+  }, [onSelectComment])
+
   if (!editor) return null;
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={editorWrapperRef} className="relative h-full w-full" onClick={handleEditorClick}>
       <FloatingCommentButton
         visible={Boolean(selectedRange)}
         onClick={onStartComment ?? (() => undefined)}

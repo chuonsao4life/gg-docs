@@ -168,3 +168,20 @@
   /* Đảm bảo label luôn nằm trên cùng */
   z-index: 50;
 }
+
+.comment-highlight {
+  cursor: pointer;
+  border-radius: 3px;
+  background: #fef3c7;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2);
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.comment-highlight:hover {
+  background: #fde68a;
+}
+
+.comment-highlight[data-active-comment="true"] {
+  background: #dbeafe;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
