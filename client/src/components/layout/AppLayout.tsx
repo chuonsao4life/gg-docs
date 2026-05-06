@@ -58,6 +58,38 @@ export function AppLayout({
         setActiveMenu(menu)
     }
 
+    const hasValidRange = (range: EditorSelectionRange | null): range is EditorSelectionRange => {
+        return Boolean(range && range.from < range.to && range.text.trim())
+    }
+
+    const removeCommentMark = (range: EditorSelectionRange | null) => {
+        if (!editor || !hasValidRange(range)) return
+
+        editor
+            .chain()
+            .focus()
+            .setTextSelection({ from: range.from, to: range.to })
+            .unsetMark("comment")
+            .run()
+    }
+
+    const applyDraftCommentMark = (range: EditorSelectionRange | null) => {
+        if (!editor || !hasValidRange(range)) return
+
+        editor
+            .chain()
+            .focus()
+            .setTextSelection({ from: range.from, to: range.to })
+            .setMark("comment", { commentId: "draft", isDraft: true })
+            .run()
+    }
+
+    const clearDraftComment = () => {
+        removeCommentMark(commentDraftRange)
+        setIsComposerOpen(false)
+        setCommentDraftRange(null)
+    }
+
     const handleStartCommentFromSelection = () => {
         const browserSelection = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : ""
         const fallbackRange: EditorSelectionRange = {
@@ -67,6 +99,8 @@ export function AppLayout({
         }
         const nextRange = selectedRange || fallbackRange
 
+        removeCommentMark(commentDraftRange)
+        applyDraftCommentMark(nextRange)
         setIsCommentPanelOpen(true)
         setIsComposerOpen(true)
         setCommentDraftRange(nextRange)
@@ -96,8 +130,11 @@ export function AppLayout({
                     .chain()
                     .focus()
                     .setTextSelection({ from: newComment.fromPos, to: newComment.toPos })
-                    .setMark("comment", { commentId: newComment.id })
+                    .unsetMark("comment")
+                    .setMark("comment", { commentId: newComment.id, isDraft: false })
                     .run()
+            } else {
+                removeCommentMark(commentDraftRange)
             }
 
             setComments((prev) => [...prev, newComment])
@@ -112,11 +149,10 @@ export function AppLayout({
     }
 
     const handleSelectComment = (commentId: string) => {
+        clearDraftComment()
         setActiveCommentId(commentId)
         setIsCommentPanelOpen(true)
-        setIsComposerOpen(false)
         setSelectedRange(null)
-        setCommentDraftRange(null)
     }
 
     const toolbarActions: EditorToolbarActions = {
@@ -176,8 +212,7 @@ export function AppLayout({
                 }}
                 onToggleComments={() => {
                     setIsCommentPanelOpen((open) => !open)
-                    setIsComposerOpen(false)
-                    setCommentDraftRange(null)
+                    clearDraftComment()
                 }}
             />
             <div className="flex flex-1 flex-col overflow-hidden">
@@ -214,14 +249,10 @@ export function AppLayout({
                                 activeCommentId={activeCommentId}
                                 onClose={() => {
                                     setIsCommentPanelOpen(false)
-                                    setIsComposerOpen(false)
-                                    setCommentDraftRange(null)
+                                    clearDraftComment()
                                 }}
                                 onSubmitComment={handleSubmitComment}
-                                onCancelComposer={() => {
-                                    setIsComposerOpen(false)
-                                    setCommentDraftRange(null)
-                                }}
+                                onCancelComposer={clearDraftComment}
                                 onSelectComment={handleSelectComment}
                             />
                         </div>

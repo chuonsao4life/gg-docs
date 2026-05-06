@@ -181,6 +181,15 @@
   background: #fde68a;
 }
 
+.comment-highlight[data-comment-draft="true"] {
+  background: #e0f2fe;
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.65);
+}
+
+.comment-highlight[data-comment-draft="true"]:hover {
+  background: #bae6fd;
+}
+
 .comment-highlight[data-active-comment="true"] {
   background: #dbeafe;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);

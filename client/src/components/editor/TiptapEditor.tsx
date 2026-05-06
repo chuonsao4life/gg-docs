@@ -77,7 +77,7 @@ export default function TiptapEditor({
 
     const commentElement = target.closest<HTMLElement>("[data-comment-id]")
     const commentId = commentElement?.dataset.commentId
-    if (!commentId) return
+    if (!commentId || commentElement?.dataset.commentDraft === "true") return
 
     event.preventDefault()
     onSelectComment?.(commentId)

@@ -15,6 +15,16 @@ export const CommentMark = Mark.create({
                     }
                 },
             },
+            isDraft: {
+                default: false,
+                parseHTML: (element) => element.getAttribute("data-comment-draft") === "true",
+                renderHTML: (attributes) => {
+                    if (!attributes.isDraft) return {}
+                    return {
+                        "data-comment-draft": "true",
+                    }
+                },
+            },
         }
     },
 
