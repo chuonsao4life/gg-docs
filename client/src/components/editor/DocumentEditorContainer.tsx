@@ -18,6 +18,7 @@ interface DocumentEditorContainerProps {
     onSelectionChange?: (range: EditorSelectionRange | null) => void;
     onStartComment?: () => void;
     onSelectComment?: (commentId: string) => void;
+    onCommentMarksChange?: (commentIds: string[]) => void;
 }
 
 export function DocumentEditorContainer({ 
@@ -29,6 +30,7 @@ export function DocumentEditorContainer({
     onSelectionChange,
     onStartComment,
     onSelectComment,
+    onCommentMarksChange,
 }: DocumentEditorContainerProps) {
 
     return (
@@ -42,6 +44,7 @@ export function DocumentEditorContainer({
                 onSelectionChange={onSelectionChange}
                 onStartComment={onStartComment}
                 onSelectComment={onSelectComment}
+                onCommentMarksChange={onCommentMarksChange}
             />
         </>
     )

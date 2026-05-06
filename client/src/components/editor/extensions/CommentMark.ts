@@ -37,9 +37,13 @@ export const CommentMark = Mark.create({
     },
 
     renderHTML({ HTMLAttributes }) {
+        const { commentId, isDraft, ...restAttributes } = HTMLAttributes
+
         return [
             "span",
-            mergeAttributes(HTMLAttributes, {
+            mergeAttributes(restAttributes, {
+                ...(commentId ? { "data-comment-id": commentId } : {}),
+                ...(isDraft ? { "data-comment-draft": "true" } : {}),
                 class: "comment-highlight",
             }),
             0,

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { ReactNode, useEffect, useState } from "react"
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Navbar } from "@/components/layout/Navbar"
 import EditorMenuBar from "@/components/editor/EditorMenuBar"
 import EditorDynamicToolbar from "@/components/editor/EditorDynamicToolbar"
@@ -36,6 +36,7 @@ export function AppLayout({
     const [commentDraftRange, setCommentDraftRange] = useState<EditorSelectionRange | null>(null)
     const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
     const [showMarginControls, setShowMarginControls] = useState(false)
+    const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set())
 
     useEffect(() => {
         let active = true
@@ -62,7 +63,7 @@ export function AppLayout({
         return Boolean(range && range.from < range.to && range.text.trim())
     }
 
-    const removeCommentMark = (range: EditorSelectionRange | null) => {
+    const removeCommentMark = useCallback((range: EditorSelectionRange | null) => {
         if (!editor || !hasValidRange(range)) return
 
         editor
@@ -71,7 +72,7 @@ export function AppLayout({
             .setTextSelection({ from: range.from, to: range.to })
             .unsetMark("comment")
             .run()
-    }
+    }, [editor])
 
     const applyDraftCommentMark = (range: EditorSelectionRange | null) => {
         if (!editor || !hasValidRange(range)) return
@@ -84,11 +85,60 @@ export function AppLayout({
             .run()
     }
 
-    const clearDraftComment = () => {
+    const clearDraftComment = useCallback(() => {
         removeCommentMark(commentDraftRange)
         setIsComposerOpen(false)
         setCommentDraftRange(null)
-    }
+    }, [commentDraftRange, removeCommentMark])
+
+    const removeCommentMarkById = useCallback((commentId: string) => {
+        if (!editor) return
+
+        const commentMark = editor.schema.marks.comment
+        if (!commentMark) return
+
+        let transaction = editor.state.tr
+
+        editor.state.doc.descendants((node: any, position: number) => {
+            if (!node.isText) return
+
+            const hasTargetComment = node.marks.some((mark: any) => (
+                mark.type === commentMark && mark.attrs.commentId === commentId
+            ))
+            if (!hasTargetComment) return
+
+            transaction = transaction.removeMark(position, position + node.nodeSize, commentMark)
+        })
+
+        if (transaction.docChanged) {
+            editor.view.dispatch(transaction)
+        }
+    }, [editor])
+
+    const deleteComment = useCallback((commentId: string) => {
+        removeCommentMarkById(commentId)
+        syncedCommentMarkIdsRef.current.delete(commentId)
+        setComments((prev) => prev.filter((comment) => comment.id !== commentId))
+        setActiveCommentId((current) => current === commentId ? null : current)
+        clearDraftComment()
+    }, [clearDraftComment, removeCommentMarkById])
+
+    const handleCommentMarksChange = useCallback((existingCommentIds: string[]) => {
+        const existingIds = new Set(existingCommentIds)
+        existingCommentIds.forEach((commentId) => syncedCommentMarkIdsRef.current.add(commentId))
+
+        const removedIds = comments
+            .filter((comment) => syncedCommentMarkIdsRef.current.has(comment.id) && !existingIds.has(comment.id))
+            .map((comment) => comment.id)
+
+        if (removedIds.length === 0) return
+
+        const removedIdSet = new Set(removedIds)
+        removedIds.forEach((commentId) => syncedCommentMarkIdsRef.current.delete(commentId))
+        setComments((prev) => prev.filter((comment) => !removedIdSet.has(comment.id)))
+        setActiveCommentId((current) => current && removedIdSet.has(current) ? null : current)
+
+    }, [comments])
 
     const handleStartCommentFromSelection = () => {
         const browserSelection = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : ""
@@ -133,6 +183,7 @@ export function AppLayout({
                     .unsetMark("comment")
                     .setMark("comment", { commentId: newComment.id, isDraft: false })
                     .run()
+                syncedCommentMarkIdsRef.current.add(newComment.id)
             } else {
                 removeCommentMark(commentDraftRange)
             }
@@ -197,6 +248,7 @@ export function AppLayout({
             },
             onStartComment: handleStartCommentFromSelection,
             onSelectComment: handleSelectComment,
+            onCommentMarksChange: handleCommentMarksChange,
         })
         : children
 
@@ -254,6 +306,7 @@ export function AppLayout({
                                 onSubmitComment={handleSubmitComment}
                                 onCancelComposer={clearDraftComment}
                                 onSelectComment={handleSelectComment}
+                                onDeleteComment={deleteComment}
                             />
                         </div>
                     )}

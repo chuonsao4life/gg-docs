@@ -16,6 +16,7 @@ type TiptapEditorProps = {
   onSelectionChange?: (range: EditorSelectionRange | null) => void
   onStartComment?: () => void
   onSelectComment?: (commentId: string) => void
+  onCommentMarksChange?: (commentIds: string[]) => void
 }
 
 export default function TiptapEditor({
@@ -25,6 +26,7 @@ export default function TiptapEditor({
   onSelectionChange,
   onStartComment,
   onSelectComment,
+  onCommentMarksChange,
 }: TiptapEditorProps) {
   const editorWrapperRef = useRef<HTMLDivElement>(null)
 
@@ -57,6 +59,38 @@ export default function TiptapEditor({
     }
   }, [editor, emitSelection, onSelectionChange])
 
+  const emitCommentMarks = useCallback(() => {
+    if (!editor) {
+      onCommentMarksChange?.([])
+      return
+    }
+
+    const commentIds = new Set<string>()
+
+    editor.state.doc.descendants((node) => {
+      node.marks.forEach((mark) => {
+        const commentId = mark.attrs.commentId
+        if (mark.type.name === "comment" && typeof commentId === "string" && commentId !== "draft") {
+          commentIds.add(commentId)
+        }
+      })
+    })
+
+    onCommentMarksChange?.([...commentIds])
+  }, [editor, onCommentMarksChange])
+
+  useEffect(() => {
+    if (!editor) {
+      onCommentMarksChange?.([])
+      return
+    }
+
+    editor.on("update", emitCommentMarks)
+    return () => {
+      editor.off("update", emitCommentMarks)
+    }
+  }, [editor, emitCommentMarks, onCommentMarksChange])
+
   useEffect(() => {
     const wrapper = editorWrapperRef.current
     if (!wrapper) return
@@ -71,22 +105,68 @@ export default function TiptapEditor({
     })
   }, [activeCommentId])
 
-  const handleEditorClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target
-    if (!(target instanceof Element)) return
+  const getCommentIdFromPoint = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (!editor) return null
 
-    const commentElement = target.closest<HTMLElement>("[data-comment-id]")
-    const commentId = commentElement?.dataset.commentId
-    if (!commentId || commentElement?.dataset.commentDraft === "true") return
+    const position = editor.view.posAtCoords({
+      left: event.clientX,
+      top: event.clientY,
+    })
+    if (!position) return null
+
+    const commentMark = editor.schema.marks.comment
+    if (!commentMark) return null
+
+    const candidatePositions = [
+      position.pos,
+      Math.max(0, position.pos - 1),
+      Math.min(editor.state.doc.content.size, position.pos + 1),
+    ]
+    const candidateMarks = candidatePositions.flatMap((pos) => {
+      const resolvedPosition = editor.state.doc.resolve(pos)
+      return [
+        ...resolvedPosition.marks(),
+        ...(resolvedPosition.nodeBefore?.marks ?? []),
+        ...(resolvedPosition.nodeAfter?.marks ?? []),
+      ]
+    })
+    const mark = candidateMarks.find((candidate) => candidate.type === commentMark)
+    const commentId = mark?.attrs.commentId
+
+    return typeof commentId === "string" && !mark?.attrs.isDraft ? commentId : null
+  }, [editor])
+
+  const handleEditorCommentPointer = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    const element =
+      target instanceof HTMLElement
+        ? target
+        : target instanceof Text
+          ? target.parentElement
+          : null
+
+    if (!element) return
+
+    const commentElement = element.closest<HTMLElement>("[data-comment-id]")
+    const domCommentId = commentElement?.getAttribute("data-comment-id")
+    const commentId = commentElement?.getAttribute("data-comment-draft") === "true"
+      ? null
+      : domCommentId || getCommentIdFromPoint(event)
+    if (!commentId) return
 
     event.preventDefault()
+    event.stopPropagation()
     onSelectComment?.(commentId)
-  }, [onSelectComment])
+  }, [getCommentIdFromPoint, onSelectComment])
 
   if (!editor) return null;
 
   return (
-    <div ref={editorWrapperRef} className="relative h-full w-full" onClick={handleEditorClick}>
+    <div
+      ref={editorWrapperRef}
+      className="relative h-full w-full"
+      onMouseDownCapture={handleEditorCommentPointer}
+    >
       <FloatingCommentButton
         visible={Boolean(selectedRange)}
         onClick={onStartComment ?? (() => undefined)}
