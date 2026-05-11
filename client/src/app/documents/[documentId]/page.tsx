@@ -37,16 +37,20 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     }, [room, doc])
 
     useEffect(() => {
-        if (!yProvider) return;
-        yProvider.on("sync", (isSynced: boolean) => {
-            console.log("Trạng thái đồng bộ:", isSynced);
-        });
-        return () => {
-            yProvider.destroy();
-        }
-    }, [yProvider])
+    if (!yProvider) return;
+    if (yProvider.synced) {
+        console.log("Đã đồng bộ từ trước (synced: true)");
+    }
+    const handleSync = (isSynced: boolean) => {
+        console.log("Trạng thái đồng bộ thay đổi:", isSynced);
+    };
+    yProvider.on("sync", handleSync);
+    return () => {
+        yProvider.off("sync", handleSync);
+    }
+}, [yProvider])
 
-    // Lấy tiêu đề thực tế của tài liệu (Tính năng từ dashboard)
+    // Lấy tiêu đề thực tế của tài liệu
     useEffect(() => {
         let active = true
         getDashboardDocument(documentId)
@@ -64,8 +68,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     const editor = useEditor({
         extensions: [
             StarterKit.configure({ history: false } as any),
-            Collaboration.configure({ document: doc }),
-            // Hiển thị con trỏ chuột của người dùng khác (Multi-player)
+            Collaboration.configure({ document: doc, field: 'content' }),
             room && userInfo && yProvider ? CollaborationCursor.configure({
                 provider: yProvider as any,
                 user: {
