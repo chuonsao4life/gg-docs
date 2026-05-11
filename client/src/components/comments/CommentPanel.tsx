@@ -16,6 +16,7 @@ type CommentPanelProps = {
     onSubmitComment: (content: string) => void
     onCancelComposer: () => void
     onSelectComment: (commentId: string) => void
+    onDeleteComment: (commentId: string) => void
 }
 
 export function CommentPanel({
@@ -27,6 +28,7 @@ export function CommentPanel({
     onSubmitComment,
     onCancelComposer,
     onSelectComment,
+    onDeleteComment,
 }: CommentPanelProps) {
     return (
         <aside data-comment-panel className="flex h-full flex-col border-l bg-muted">
@@ -63,6 +65,7 @@ export function CommentPanel({
                             comment={comment}
                             isActive={comment.id === activeCommentId}
                             onClick={() => onSelectComment(comment.id)}
+                            onDelete={() => onDeleteComment(comment.id)}
                         />
                     ))
                 )}

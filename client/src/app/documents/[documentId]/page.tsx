@@ -17,6 +17,7 @@ import { LiveblocksYjsProvider } from "@liveblocks/yjs"
 import * as Y from 'yjs'
 import { getDashboardDocument } from "@/services/document.service"
 import { readStoredSession } from "@/services/auth.service"
+import { CommentMark } from "@/components/editor/extensions/CommentMark"
 
 type Props = {
     params: Promise<{
@@ -81,6 +82,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                 placeholder: "Bắt đầu soạn thảo tài liệu...",
             }),
             Underline,
+            CommentMark,
         ].filter(Boolean) as any,
         immediatelyRender: false,
         shouldRerenderOnTransaction: true,
