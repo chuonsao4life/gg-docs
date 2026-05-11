@@ -17,7 +17,13 @@ import { LiveblocksYjsProvider } from "@liveblocks/yjs"
 import * as Y from 'yjs'
 import { getDashboardDocument } from "@/services/document.service"
 import { readStoredSession } from "@/services/auth.service"
-import { CommentMark } from "@/components/editor/extensions/CommentMark"
+import Color from '@tiptap/extension-color'
+import Highlight from '@tiptap/extension-highlight'
+import { FontSize } from '@/components/editor/extensions/FontSize'
+import FontFamily from '@tiptap/extension-font-family'
+import TextAlign from '@tiptap/extension-text-align'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 
 type Props = {
     params: Promise<{
@@ -68,7 +74,20 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
 
     const editor = useEditor({
         extensions: [
-            StarterKit.configure({ history: false } as any),
+            StarterKit.configure({
+                 history: false,
+                 bulletList: {
+                    HTMLAttributes: {
+                        class: 'list-disc list-inside',
+                    },
+                },
+                 orderedList: {
+                    HTMLAttributes: {
+                        class: 'list-decimal list-inside',
+                    },
+                },
+                 listItem: {},
+                } as any),
             Collaboration.configure({ document: doc, field: 'content' }),
             room && userInfo && yProvider ? CollaborationCursor.configure({
                 provider: yProvider as any,
@@ -78,15 +97,32 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                 },
             }) : null,
             TextStyle,
-            Placeholder.configure({
-                placeholder: "Bắt đầu soạn thảo tài liệu...",
+            FontFamily,
+            FontSize,
+            Color.configure({ types: [TextStyle.name] }),
+            Highlight.configure({
+                multicolor: true,
+            }),
+            TextAlign.configure({
+                types: ['heading', 'paragraph', 'bulletList', 'orderedList', 'listItem'],
+            }),
+            TaskList.configure({
+                HTMLAttributes: {
+                    class: 'list-none',
+                },
+            }),
+            TaskItem.configure({
+                nested: true,
+                HTMLAttributes: {
+                    class: 'flex items-start gap-2',
+                },
             }),
             Underline,
-            CommentMark,
         ].filter(Boolean) as any,
         immediatelyRender: false,
         shouldRerenderOnTransaction: true,
     }, [doc, room, userInfo, yProvider]);
+
 
     return (
         <AppLayout 
@@ -107,19 +143,24 @@ export default function Page({ params }: Props) {
     const resolvedParams = use(params)
     const router = useRouter()
     const [isMounted, setIsMounted] = useState(false)
-    const [authChecked, setAuthChecked] = useState(false)
+    
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsMounted(true)
+        }, 0)
+        return () => clearTimeout(timer)
+    }, [])
+
+    const session = typeof window !== 'undefined' ? readStoredSession() : null
+    const authChecked = !!session?.token
 
     // Auth Guard từ Dashboard branch
     useEffect(() => {
-        setIsMounted(true)
-        const session = readStoredSession()
-        if (!session?.token) {
+        if (isMounted && !authChecked) {
             const currentPath = window.location.pathname
             router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
-            return
         }
-        setAuthChecked(true)
-    }, [router])
+    }, [isMounted, authChecked, router])
 
     if (!isMounted || !authChecked) {
         return (

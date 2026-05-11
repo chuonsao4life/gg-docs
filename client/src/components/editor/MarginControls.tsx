@@ -22,7 +22,7 @@ export function MarginControls({ margins, onChange }: MarginControlsProps) {
 
     return (
         <div className="border-b bg-white px-4 py-2">
-            <div className="mx-auto flex max-w-[794px] flex-wrap items-center gap-2">
+            <div className="mx-auto flex max-w-\[794px\] flex-wrap items-center gap-2">
                 {FIELDS.map((field) => (
                     <label key={field.key} className="flex items-center gap-1 text-xs text-gray-600">
                         <span>{field.label}</span>

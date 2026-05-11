@@ -4,7 +4,7 @@ import React from "react"
 import { Editor } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Bold, Italic, Underline, Undo, Redo, Image as ImageIcon, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus } from "lucide-react"
+import { Bold, Italic, Underline, Undo, Redo, Image as ImageIcon, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus, AlignCenter, AlignRight } from "lucide-react"
 
 export type EditorToolbarProps = {
     editor: Editor | null
@@ -37,7 +37,7 @@ function smallBtnProps() {
 }
 
 export function EditorToolbar(props: EditorToolbarProps) {
-    const { activeMarks = {}, disabled } = props
+    const { activeMarks = {}, disabled, editor } = props
 
     function handleAddComment() {
         if (props.onAddComment) {
@@ -45,6 +45,20 @@ export function EditorToolbar(props: EditorToolbarProps) {
             return
         }
         console.log("Select text to add a comment")
+    }
+
+    // Lấy giá trị cỡ chữ hiện tại từ Editor
+    const currentFontSize = editor?.getAttributes('textStyle').fontSize?.replace('px', '') || "16"
+    
+    // Lấy màu chữ hiện tại từ Editor (mặc định màu đen)
+    const currentTextColor = editor?.getAttributes('textStyle').color || "#000000"
+
+    //Xác định kiểu văn bản hiện tại (Style)
+    const getCurrentStyle = () => {
+        if (editor?.isActive('heading', { level: 1 })) return 'h1'
+        if (editor?.isActive('heading', { level: 2 })) return 'h2'
+        if (editor?.isActive('heading', { level: 3 })) return 'h3'
+        return 'paragraph' // Mặc định là Normal text
     }
 
     return (
@@ -71,7 +85,7 @@ export function EditorToolbar(props: EditorToolbarProps) {
                     <button title="Print" aria-label="Print" className={smallBtnProps()} onClick={() => props.onPrint && props.onPrint()} disabled={disabled}>P</button>
                 </div>
 
-                <Separator orientation="vertical" />
+                <Separator orientation="vertical" className="h-6 mx-1"/>
 
                 <div className="flex items-center gap-2">
                     <select aria-label="Zoom" defaultValue="100%" className="rounded px-2 py-1 text-sm">
@@ -81,44 +95,154 @@ export function EditorToolbar(props: EditorToolbarProps) {
                         <option>125%</option>
                         <option>150%</option>
                     </select>
-                    <select aria-label="Style" defaultValue="Normal text" className="rounded px-2 py-1 text-sm">
-                        <option>Normal text</option>
-                        <option>Heading 1</option>
+                    <select 
+                        aria-label="Style" 
+                        value={getCurrentStyle()}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'paragraph') {
+                                editor?.chain().focus().setParagraph().run();
+                            } else if (val === 'h1') {
+                                editor?.chain().focus().toggleHeading({ level: 1 }).run();
+                            } else if (val === 'h2') {
+                                editor?.chain().focus().toggleHeading({ level: 2 }).run();
+                            } else if (val === 'h3') {
+                                editor?.chain().focus().toggleHeading({ level: 3 }).run();
+                            }
+                        }}
+                        disabled={disabled}
+                        className="rounded px-2 py-1 text-sm bg-transparent hover:bg-muted/50 cursor-pointer font-medium"
+                    >
+                        <option value="paragraph">Normal text</option>
+                        <option value="h1">Heading 1</option>
+                        <option value="h2">Heading 2</option>
+                        <option value="h3">Heading 3</option>
                     </select>
-                    <select aria-label="Font" defaultValue="Arial" className="rounded px-2 py-1 text-sm">
-                        <option>Arial</option>
-                        <option>Times New Roman</option>
+                    <select 
+                        aria-label="Font" 
+                        onChange={(e) => editor?.chain().focus().setFontFamily(e.target.value).run()}
+                        value={editor?.getAttributes('textStyle').fontFamily || 'Arial'}
+                        className="rounded px-2 py-1 text-sm bg-transparent hover:bg-muted/50 cursor-pointer"
+                    >
+                        <option value="Arial">Arial</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Georgia">Georgia</option>
                     </select>
-                    <select aria-label="Font size" defaultValue="11" className="rounded px-2 py-1 text-sm">
-                        <option>9</option>
-                        <option>10</option>
-                        <option>11</option>
-                        <option>12</option>
+                    <select 
+                        aria-label="Font size" 
+                        value={currentFontSize}
+                        onChange={(e) => editor?.chain().focus().setFontSize(`${e.target.value}px`).run()}
+                        disabled={disabled}
+                        className="rounded px-2 py-1 text-sm bg-transparent hover:bg-muted/50 cursor-pointer"
+                    >
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="14">14</option>
+                        <option value="18">18</option>
+                        <option value="24">24</option>
+                        <option value="36">36</option>
                     </select>
                 </div>
 
-                <Separator orientation="vertical" />
+                <Separator orientation="vertical" className="h-6 mx-1"/>
 
                 <div className="flex items-center gap-2">
                     <button title="Bold" aria-label="Bold" className={`${smallBtnProps()} ${activeMarks.bold ? 'bg-muted/40' : ''}`} onClick={() => props.onBold && props.onBold()} disabled={disabled}><Bold className="h-4 w-4" /></button>
                     <button title="Italic" aria-label="Italic" className={`${smallBtnProps()} ${activeMarks.italic ? 'bg-muted/40' : ''}`} onClick={() => props.onItalic && props.onItalic()} disabled={disabled}><Italic className="h-4 w-4" /></button>
                     <button title="Underline" aria-label="Underline" className={`${smallBtnProps()} ${activeMarks.underline ? 'bg-muted/40' : ''}`} onClick={() => props.onUnderline && props.onUnderline()} disabled={disabled}><Underline className="h-4 w-4" /></button>
-                    <button title="Text color" aria-label="Text color" className={smallBtnProps()} onClick={() => props.onTextColor && props.onTextColor()} disabled={disabled}>A</button>
+                    <div title="Text color" className={`${smallBtnProps()} relative overflow-hidden`}>
+                        <input 
+                            type="color" 
+                            value={currentTextColor}
+                            onInput={(e) => editor?.chain().focus().setColor(e.currentTarget.value).run()}
+                            disabled={disabled}
+                            className="absolute -top-2 -left-2 h-12 w-12 cursor-pointer border-0 bg-transparent p-0" 
+                        />
+                    </div>
                     <button title="Link" aria-label="Link" className={smallBtnProps()} onClick={() => props.onLink && props.onLink()} disabled={disabled}><Link className="h-4 w-4" /></button>
                     <button title="Add comment" aria-label="Add comment" className={smallBtnProps()} onClick={handleAddComment} disabled={disabled}><MessageSquare className="h-4 w-4" /></button>
                 </div>
 
-                <Separator orientation="vertical" />
+                <Separator orientation="vertical" className="h-6 mx-1"/>
 
                 <div className="flex items-center gap-2">
                     <button title="Image" aria-label="Image" className={smallBtnProps()} onClick={() => props.onImage && props.onImage()} disabled={disabled}><ImageIcon className="h-4 w-4" /></button>
-                    <button title="Align" aria-label="Align" className={smallBtnProps()} onClick={() => props.onAlignLeft && props.onAlignLeft()} disabled={disabled}><AlignLeft className="h-4 w-4" /></button>
+                    <button 
+                        title="Align Left" 
+                        aria-label="Align Left" 
+                        className={`${smallBtnProps()} ${editor?.isActive({ textAlign: 'left' }) ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+                        disabled={disabled}
+                    >
+                        <AlignLeft className="h-4 w-4" />
+                    </button>
+                    <button 
+                        title="Align Center" 
+                        aria-label="Align Center" 
+                        className={`${smallBtnProps()} ${editor?.isActive({ textAlign: 'center' }) ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+                        disabled={disabled}
+                    >
+                        <AlignCenter className="h-4 w-4" />
+                    </button>
+                    <button 
+                        title="Align Right" 
+                        aria-label="Align Right" 
+                        className={`${smallBtnProps()} ${editor?.isActive({ textAlign: 'right' }) ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+                        disabled={disabled}
+                    >
+                        <AlignRight className="h-4 w-4" />
+                    </button>
                     <button title="Line spacing" aria-label="Line spacing" className={smallBtnProps()}><Minus className="h-4 w-4" /></button>
-                    <button title="Checklist" aria-label="Checklist" className={smallBtnProps()} onClick={() => props.onChecklist && props.onChecklist()} disabled={disabled}><CheckSquare className="h-4 w-4" /></button>
-                    <button title="Bullet list" aria-label="Bullet list" className={smallBtnProps()} onClick={() => props.onBulletList && props.onBulletList()} disabled={disabled}><List className="h-4 w-4" /></button>
-                    <button title="Numbered list" aria-label="Numbered list" className={smallBtnProps()} onClick={() => props.onNumberedList && props.onNumberedList()} disabled={disabled}><ListOrdered className="h-4 w-4" /></button>
-                    <button title="Decrease indent" aria-label="Decrease indent" className={smallBtnProps()} onClick={() => props.onDecreaseIndent && props.onDecreaseIndent()} disabled={disabled}><Minus className="h-4 w-4" /></button>
-                    <button title="Increase indent" aria-label="Increase indent" className={smallBtnProps()} onClick={() => props.onIncreaseIndent && props.onIncreaseIndent()} disabled={disabled}><Plus className="h-4 w-4" /></button>
+                    <button 
+                        title="Checklist" 
+                        aria-label="Checklist" 
+                        className={`${smallBtnProps()} ${editor?.isActive('taskList') ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().toggleTaskList().run()}
+                        disabled={disabled}
+                    >
+                        <CheckSquare className="h-4 w-4" />
+                    </button>                    
+                    <button 
+                        title="Bullet list" 
+                        aria-label="Bullet list" 
+                        className={`${smallBtnProps()} ${editor?.isActive('bulletList') ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                        disabled={disabled}
+                    >
+                        <List className="h-4 w-4" />
+                    </button>
+                    <button 
+                        title="Numbered list" 
+                        aria-label="Numbered list" 
+                        className={`${smallBtnProps()} ${editor?.isActive('orderedList') ? 'bg-muted/40' : ''}`}
+                        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                        disabled={disabled}
+                    >
+                        <ListOrdered className="h-4 w-4" />
+                    </button>
+                    <button 
+                        title="Decrease indent" 
+                        aria-label="Decrease indent" 
+                        className={smallBtnProps()}
+                        onClick={() => editor?.chain().focus().liftListItem('listItem').run()}
+                        disabled={disabled}
+                    >
+                        <Minus className="h-4 w-4" />
+                    </button>
+                    <button 
+                        title="Increase indent" 
+                        aria-label="Increase indent" 
+                        className={smallBtnProps()}
+                        onClick={() => editor?.chain().focus().sinkListItem('listItem').run()}
+                        disabled={disabled}
+                    >
+                        <Plus className="h-4 w-4" />
+                    </button>
                 </div>
             </div>
         </div>
