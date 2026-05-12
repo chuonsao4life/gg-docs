@@ -11,7 +11,7 @@ import { FeaturesSection } from '@/components/features-section';
 import {
   changeCurrentUserPassword,
   getCurrentUser,
-  readStoredSession,
+  getStoredAccessToken,
   updateCurrentUser,
 } from '@/services/auth.service';
 
@@ -41,8 +41,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const session = readStoredSession();
-    if (!session?.token) {
+    if (!getStoredAccessToken()) {
       router.push('/login');
       return;
     }

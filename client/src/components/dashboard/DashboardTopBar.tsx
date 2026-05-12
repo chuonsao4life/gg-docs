@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { CalendarDays, FileText, Plus, Search, Settings } from "lucide-react"
+import { CalendarDays, FileText, LogOut, Plus, Search, Settings } from "lucide-react"
 
 export function DashboardTopBar({
   search,
@@ -7,12 +7,14 @@ export function DashboardTopBar({
   userInitials,
   creating,
   onCreateBlank,
+  onLogout,
 }: {
   search: string
   onSearchChange: (value: string) => void
   userInitials: string
   creating: boolean
   onCreateBlank: () => void
+  onLogout: () => void
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -70,6 +72,14 @@ export function DashboardTopBar({
           title="Tài khoản"
         >
           {userInitials}
+        </button>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-destructive sm:flex"
+          title="Đăng xuất"
+        >
+          <LogOut className="h-5 w-5" />
         </button>
       </div>
     </header>

@@ -27,7 +27,7 @@ function LoginContent() {
     try {
       const data = await loginUser(form);
       // Persist token + basic user
-      localStorage.setItem('token', data.token);
+      localStorage.setItem('token', data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
       
       // Chuyển hướng về trang cũ nếu có, nếu không thì về dashboard

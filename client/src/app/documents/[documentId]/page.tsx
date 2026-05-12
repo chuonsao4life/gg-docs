@@ -16,7 +16,7 @@ import Underline from '@tiptap/extension-underline'
 import { LiveblocksYjsProvider } from "@liveblocks/yjs"
 import * as Y from 'yjs'
 import { getDashboardDocument } from "@/services/document.service"
-import { readStoredSession } from "@/services/auth.service"
+import { getStoredAccessToken } from "@/services/auth.service"
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import { FontSize } from '@/components/editor/extensions/FontSize'
@@ -151,8 +151,7 @@ export default function Page({ params }: Props) {
         return () => clearTimeout(timer)
     }, [])
 
-    const session = typeof window !== 'undefined' ? readStoredSession() : null
-    const authChecked = !!session?.token
+    const authChecked = Boolean(getStoredAccessToken())
 
     // Auth Guard từ Dashboard branch
     useEffect(() => {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutGrid, List, RefreshCw } from "lucide-react"
 import { ChatPanel } from "@/components/chat-panel"
+import { logoutUser } from "@/services/auth.service"
 import {
   createDashboardDocument,
   listDashboardDocuments,
@@ -119,6 +120,11 @@ export function DocumentDashboard() {
     router.push(`/documents/${docId}`)
   }
 
+  const handleLogout = async () => {
+    await logoutUser()
+    router.replace("/login")
+  }
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <DashboardTopBar
@@ -127,6 +133,7 @@ export function DocumentDashboard() {
         userInitials={userInitials}
         creating={creatingTemplateId === "blank"}
         onCreateBlank={() => handleCreateDocument("blank")}
+        onLogout={handleLogout}
       />
 
       <main>

@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { isPublicRoute } from "@/lib/auth-routes"
-import { onSessionChange, readStoredSession } from "@/services/auth.service"
+import { getStoredAccessToken, onSessionChange } from "@/services/auth.service"
 
 function getCurrentUrlForRedirect() {
   if (typeof window === "undefined") return "/"
@@ -24,7 +24,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const syncAuthState = () => {
-      const nextHasSession = Boolean(readStoredSession()?.token)
+      const nextHasSession = Boolean(getStoredAccessToken())
 
       setHasSession(nextHasSession)
       setAuthChecked(true)
