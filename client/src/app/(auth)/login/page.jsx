@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginUser } from '../../../services/auth.service';
+import { getSafeRedirectPath } from '../../../lib/auth-routes';
 
 function LoginContent() {
   const router = useRouter();
@@ -30,8 +31,8 @@ function LoginContent() {
       localStorage.setItem('user', JSON.stringify(data.user));
       
       // Chuyển hướng về trang cũ nếu có, nếu không thì về dashboard
-      const redirectPath = searchParams.get('redirect');
-      router.push(redirectPath || '/dashboard');
+      const redirectPath = getSafeRedirectPath(searchParams.get('redirect'));
+      router.push(redirectPath);
     } catch (err) {
       setError(err.message || 'Unable to log in.');
     } finally {
