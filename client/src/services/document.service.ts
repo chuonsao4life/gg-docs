@@ -196,3 +196,9 @@ export async function createDocumentComment(
     body: JSON.stringify(payload),
   })
 }
+
+export async function deleteDocumentComment(documentId: string, commentId: string) {
+  return request<{ id: string }>(`/documents/${documentId}/comments/${commentId}`, {
+    method: "DELETE",
+  })
+}

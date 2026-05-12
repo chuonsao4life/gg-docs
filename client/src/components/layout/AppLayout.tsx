@@ -13,7 +13,8 @@ import type { EditorSelectionRange } from "@/types/editor-selection"
 import type { DocumentComment } from "@/types/comment"
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 import { CommentPanel } from "@/components/comments/CommentPanel"
-import { createDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
+import { createDocumentComment, deleteDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
+import { commentService } from "@/lib/commentService"
 
 
 export function AppLayout({
@@ -37,6 +38,7 @@ export function AppLayout({
     const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
     const [showMarginControls, setShowMarginControls] = useState(false)
     const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set())
+    const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set())
 
     useEffect(() => {
         let active = true
@@ -47,6 +49,9 @@ export function AppLayout({
             })
             .catch((error) => {
                 console.warn("Unable to load comments", error)
+                commentService.getComments(documentId).then((nextComments) => {
+                    if (active) setComments(nextComments)
+                })
             })
 
         return () => {
@@ -102,12 +107,14 @@ export function AppLayout({
         editor.state.doc.descendants((node: any, position: number) => {
             if (!node.isText) return
 
-            const hasTargetComment = node.marks.some((mark: any) => (
+            const targetCommentMarks = node.marks.filter((mark: any) => (
                 mark.type === commentMark && mark.attrs.commentId === commentId
             ))
-            if (!hasTargetComment) return
+            if (targetCommentMarks.length === 0) return
 
-            transaction = transaction.removeMark(position, position + node.nodeSize, commentMark)
+            targetCommentMarks.forEach((mark: any) => {
+                transaction = transaction.removeMark(position, position + node.nodeSize, mark)
+            })
         })
 
         if (transaction.docChanged) {
@@ -115,26 +122,94 @@ export function AppLayout({
         }
     }, [editor])
 
-    const deleteComment = useCallback((commentId: string) => {
-        removeCommentMarkById(commentId)
-        syncedCommentMarkIdsRef.current.delete(commentId)
-        setComments((prev) => prev.filter((comment) => comment.id !== commentId))
-        setActiveCommentId((current) => current === commentId ? null : current)
-        clearDraftComment()
-    }, [clearDraftComment, removeCommentMarkById])
+    const deleteComment = useCallback(async (commentId: string) => {
+        try {
+            await deleteDocumentComment(documentId, commentId)
+            removeCommentMarkById(commentId)
+            syncedCommentMarkIdsRef.current.delete(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+            setComments((prev) => prev.filter((comment) => comment.id !== commentId))
+            setActiveCommentId((current) => current === commentId ? null : current)
+            clearDraftComment()
+        } catch (error) {
+            console.warn("Unable to delete comment", error)
+        }
+    }, [clearDraftComment, documentId, removeCommentMarkById])
+
+    useEffect(() => {
+        if (!editor || comments.length === 0) return
+
+        const commentMark = editor.schema.marks.comment
+        if (!commentMark) return
+
+        const existingCommentIds = new Set<string>()
+        editor.state.doc.descendants((node: any) => {
+            if (!node.isText) return
+
+            node.marks.forEach((mark: any) => {
+                const commentId = mark.attrs.commentId
+                if (
+                    mark.type === commentMark &&
+                    typeof commentId === "string" &&
+                    commentId !== "draft"
+                ) {
+                    existingCommentIds.add(commentId)
+                }
+            })
+        })
+
+        let transaction = editor.state.tr
+
+        comments.forEach((comment) => {
+            if (existingCommentIds.has(comment.id)) return
+            if (
+                typeof comment.fromPos !== "number" ||
+                typeof comment.toPos !== "number" ||
+                comment.fromPos >= comment.toPos ||
+                comment.fromPos < 0 ||
+                comment.toPos > editor.state.doc.content.size
+            ) {
+                return
+            }
+
+            transaction = transaction.addMark(
+                comment.fromPos,
+                comment.toPos,
+                commentMark.create({ commentId: comment.id, isDraft: false }),
+            )
+            existingCommentIds.add(comment.id)
+            syncedCommentMarkIdsRef.current.add(comment.id)
+        })
+
+        if (transaction.docChanged) {
+            editor.view.dispatch(transaction)
+        }
+    }, [editor, comments])
 
     const handleCommentMarksChange = useCallback((existingCommentIds: string[]) => {
         const existingIds = new Set(existingCommentIds)
-        existingCommentIds.forEach((commentId) => syncedCommentMarkIdsRef.current.add(commentId))
+        existingCommentIds.forEach((commentId) => {
+            syncedCommentMarkIdsRef.current.add(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+        })
 
         const removedIds = comments
-            .filter((comment) => syncedCommentMarkIdsRef.current.has(comment.id) && !existingIds.has(comment.id))
+            .filter((comment) => {
+                if (!syncedCommentMarkIdsRef.current.has(comment.id) || existingIds.has(comment.id)) {
+                    return false
+                }
+
+                return !recentlyCreatedCommentIdsRef.current.has(comment.id)
+            })
             .map((comment) => comment.id)
 
         if (removedIds.length === 0) return
 
         const removedIdSet = new Set(removedIds)
-        removedIds.forEach((commentId) => syncedCommentMarkIdsRef.current.delete(commentId))
+        removedIds.forEach((commentId) => {
+            syncedCommentMarkIdsRef.current.delete(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+        })
         setComments((prev) => prev.filter((comment) => !removedIdSet.has(comment.id)))
         setActiveCommentId((current) => current && removedIdSet.has(current) ? null : current)
 
@@ -163,11 +238,15 @@ export function AppLayout({
         if (!commentDraftRange || !trimmedContent) return
 
         try {
-            const newComment = await createDocumentComment(documentId, {
+            const commentPayload = {
                 content: trimmedContent,
                 selectedText: commentDraftRange.text,
                 fromPos: commentDraftRange.from,
                 toPos: commentDraftRange.to,
+            }
+            const newComment = await createDocumentComment(documentId, commentPayload).catch((error) => {
+                console.warn("Unable to create comment through API, using local fallback", error)
+                return commentService.createComment(documentId, commentPayload)
             })
 
             if (
@@ -176,6 +255,7 @@ export function AppLayout({
                 newComment.toPos !== null &&
                 newComment.fromPos < newComment.toPos
             ) {
+                recentlyCreatedCommentIdsRef.current.add(newComment.id)
                 editor
                     .chain()
                     .focus()
@@ -184,6 +264,9 @@ export function AppLayout({
                     .setMark("comment", { commentId: newComment.id, isDraft: false })
                     .run()
                 syncedCommentMarkIdsRef.current.add(newComment.id)
+                window.setTimeout(() => {
+                    recentlyCreatedCommentIdsRef.current.delete(newComment.id)
+                }, 500)
             } else {
                 removeCommentMark(commentDraftRange)
             }
