@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutGrid, List, RefreshCw } from "lucide-react"
 import { ChatPanel } from "@/components/chat-panel"
+import { logoutUser } from "@/services/auth.service"
 import {
   createDashboardDocument,
   listDashboardDocuments,
@@ -17,7 +18,6 @@ import {
   FALLBACK_DOCUMENTS,
   ESSENTIAL_TEMPLATE_IDS,
   getInitials,
-  isUserAuthenticated,
   OwnerFilter,
   SortMode,
   ViewMode
@@ -39,23 +39,7 @@ export function DocumentDashboard() {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [userInitials, setUserInitials] = useState("T")
-  const [authChecked, setAuthChecked] = useState(false)
   const localDraftCounter = useRef(0)
-
-  // Auth guard: Kiểm tra đăng nhập trước khi hiển thị dashboard
-  useEffect(() => {
-    const raw = typeof window !== "undefined" ? localStorage.getItem("auth-session") : null
-    let token: string | null = null
-    if (raw) {
-      try { token = JSON.parse(raw)?.token || null } catch { token = null }
-    }
-    
-    if (!token) {
-      router.push("/login?redirect=/dashboard")
-      return
-    }
-    setAuthChecked(true)
-  }, [router])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setUserInitials(getInitials()), 0)
@@ -136,15 +120,9 @@ export function DocumentDashboard() {
     router.push(`/documents/${docId}`)
   }
 
-  if (!authChecked) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-white text-slate-900 font-sans">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <div className="text-sm font-medium">Đang tải ứng dụng...</div>
-        </div>
-      </div>
-    )
+  const handleLogout = async () => {
+    await logoutUser()
+    router.replace("/login")
   }
 
   return (
@@ -155,6 +133,7 @@ export function DocumentDashboard() {
         userInitials={userInitials}
         creating={creatingTemplateId === "blank"}
         onCreateBlank={() => handleCreateDocument("blank")}
+        onLogout={handleLogout}
       />
 
       <main>

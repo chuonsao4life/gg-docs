@@ -61,7 +61,7 @@ function getBearerToken(req) {
 }
 
 function getAuthUser(req) {
-  const token = getBearerToken(req);
+  const token = req.cookies?.accessToken || getBearerToken(req);
   if (!token) return null;
 
   try {
