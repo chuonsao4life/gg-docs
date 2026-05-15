@@ -86,7 +86,7 @@ export function isUserAuthenticated() {
   if (!raw) return false
   try {
     const session = JSON.parse(raw)
-    return !!session?.token
+    return !!(session?.accessToken || session?.token)
   } catch {
     return false
   }

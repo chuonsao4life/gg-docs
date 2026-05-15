@@ -35,7 +35,7 @@ collab-doc-editor/
 
 ```bash
 git clone https://github.com/Ldieu0604/Nhom17-IT4409-20252.git
-cd collab-doc-editor
+cd Nhom17-IT4409-20252/
 ```
 
 2. **Install dependencies**
@@ -58,9 +58,9 @@ cp .env.example .env
 
 
 ```bash
-# Server
+# Client
 cd ../client
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 4. **Set up the database**

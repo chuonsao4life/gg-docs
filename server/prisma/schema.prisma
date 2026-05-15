@@ -21,6 +21,20 @@ model User {
   permissions    Permission[]
   comments       Comment[]
   snapshots      Snapshot[]
+  sessions       Session[]
+}
+
+model Session {
+  id                 String   @id @default(uuid())
+  userID             String
+  user               User     @relation(fields: [userID], references: [id], onDelete: Cascade)
+  expireAt           DateTime
+  hashedRefreshToken String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userID])
+  @@index([expireAt])
 }
 
 model Document {

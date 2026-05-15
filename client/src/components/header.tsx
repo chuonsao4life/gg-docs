@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -12,10 +13,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Settings, Menu, X, Users, FileText, LayoutGrid, Calendar } from "lucide-react"
+import { Search, Bell, Settings, Menu, X, Users, FileText, LayoutGrid, Calendar, LogOut } from "lucide-react"
+import { logoutUser } from "@/services/auth.service"
 
 export function Header() {
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  const handleLogout = async () => {
+    await logoutUser()
+    router.replace("/login")
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -109,7 +117,10 @@ export function Header() {
               </DropdownMenuItem>
               <DropdownMenuItem>Trợ giúp</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">Đăng xuất</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onSelect={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Đăng xuất
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

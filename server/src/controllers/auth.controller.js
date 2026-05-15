@@ -7,23 +7,39 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
-const { JWT_SECRET = "change-me-in-env", JWT_EXPIRES_IN = "7d", SALT_ROUNDS = 10 } = process.env;
 
-function getBearerToken(req) {
-  const authHeader = req.headers.authorization || req.headers.Authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-  return authHeader.split(" ")[1] || null;
+const {
+  JWT_SECRET = "change-me-in-env",
+  JWT_EXPIRES_IN = "15m",
+  REFRESH_TOKEN_EXPIRES_IN_DAYS = "7",
+  SALT_ROUNDS = "10",
+} = process.env;
+
+const ACCESS_TOKEN_COOKIE = "accessToken";
+const REFRESH_TOKEN_COOKIE = "refreshToken";
+const SESSION_ID_COOKIE = "sessionId";
+const refreshTokenMaxAgeMs = Number(REFRESH_TOKEN_EXPIRES_IN_DAYS) * 24 * 60 * 60 * 1000;
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+  path: "/",
+};
+
+function ok(res, status, message, data) {
+  return res.status(status).json({
+    success: true,
+    ...(message ? { message } : {}),
+    ...(data !== undefined ? { data } : {}),
+  });
 }
 
-function getAuthUser(req) {
-  const token = getBearerToken(req);
-  if (!token) return null;
-
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch {
-    return null;
-  }
+function fail(res, status, message) {
+  return res.status(status).json({
+    success: false,
+    message,
+  });
 }
 
 function formatUser(user) {
@@ -35,115 +51,246 @@ function formatUser(user) {
     username: user.username,
     firstname: user.firstname,
     lastname: user.lastname,
-    avatar: user.avatar,
+    avatar: user.avatar ?? null,
     createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
   };
 }
 
-/**
- * POST /auth/register
- */
-export const register = async (req, res) => {
+function signAccessToken(user, sessionId) {
+  return jwt.sign(
+    { id: user.id, email: user.email, username: user.username, sessionId },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN },
+  );
+}
+
+function signRefreshToken(user, sessionId) {
+  return jwt.sign(
+    { id: user.id, sessionId, type: "refresh" },
+    JWT_SECRET,
+    { expiresIn: `${REFRESH_TOKEN_EXPIRES_IN_DAYS}d` },
+  );
+}
+
+async function createSession(user) {
+  const expireAt = new Date(Date.now() + refreshTokenMaxAgeMs);
+  const session = await prisma.session.create({
+    data: {
+      userID: user.id,
+      expireAt,
+      hashedRefreshToken: "pending",
+    },
+  });
+  const refreshToken = signRefreshToken(user, session.id);
+  const hashedRefreshToken = await bcrypt.hash(refreshToken, Number(SALT_ROUNDS));
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { hashedRefreshToken },
+  });
+
+  return {
+    session: { ...session, hashedRefreshToken, expireAt },
+    refreshToken,
+    accessToken: signAccessToken(user, session.id),
+  };
+}
+
+function setAuthCookies(res, { accessToken, refreshToken, sessionId }) {
+  res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
+    ...cookieOptions,
+  });
+
+  if (refreshToken) {
+    res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
+      ...cookieOptions,
+      maxAge: refreshTokenMaxAgeMs,
+    });
+  }
+
+  if (sessionId) {
+    res.cookie(SESSION_ID_COOKIE, sessionId, {
+      ...cookieOptions,
+      maxAge: refreshTokenMaxAgeMs,
+    });
+  }
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie(ACCESS_TOKEN_COOKIE, cookieOptions);
+  res.clearCookie(REFRESH_TOKEN_COOKIE, cookieOptions);
+  res.clearCookie(SESSION_ID_COOKIE, cookieOptions);
+}
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  return authHeader.split(" ")[1] || null;
+}
+
+function getAccessToken(req) {
+  return req.cookies?.[ACCESS_TOKEN_COOKIE] || getBearerToken(req);
+}
+
+function getAuthUser(req) {
+  const token = getAccessToken(req);
+  if (!token) return null;
+
   try {
-    const { email, password, username, firstname, lastname } = req.body;
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
 
-    // Basic validation
-    if (!email || !password || !username || !firstname || !lastname) {
-      return res.status(400).json({
-        message:
-          "All fields (email, password, username, firstname, lastname) are required.",
-      });
+function getRefreshPayload(refreshToken) {
+  try {
+    const payload = jwt.verify(refreshToken, JWT_SECRET);
+    return payload?.type === "refresh" ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+async function findValidSession(refreshToken) {
+  const payload = getRefreshPayload(refreshToken);
+  if (!payload?.sessionId) return null;
+
+  const session = await prisma.session.findUnique({
+    where: { id: payload.sessionId },
+    include: { user: true },
+  });
+
+  if (!session || session.expireAt <= new Date()) return null;
+
+  const tokenMatches = await bcrypt.compare(refreshToken, session.hashedRefreshToken);
+  return tokenMatches ? session : null;
+}
+
+async function passwordMatches(user, { password, hashedPassword }) {
+  if (hashedPassword && user.hashedPassword === hashedPassword) return true;
+  if (!password) return false;
+
+  try {
+    return await bcrypt.compare(password, user.hashedPassword);
+  } catch {
+    return false;
+  }
+}
+
+export const signup = async (req, res) => {
+  try {
+    const { email, password, hashedPassword, username, lastname, firstname } = req.body;
+
+    if (!email || (!hashedPassword && !password) || !username || !lastname || !firstname) {
+      return fail(res, 400, "Missing input.");
     }
 
-    if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 6 characters long." });
-    }
-
-    // Check duplicates (email OR username)
     const existing = await prisma.user.findFirst({
       where: { OR: [{ email }, { username }] },
     });
 
     if (existing) {
-      const conflictField = existing.email === email ? "Email" : "Username";
-      return res
-        .status(409)
-        .json({ message: `${conflictField} is already in use.` });
+      return fail(res, 409, "Email/username exists.");
     }
 
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const user = await prisma.user.create({
       data: {
         email,
+        hashedPassword: hashedPassword || await bcrypt.hash(password, Number(SALT_ROUNDS)),
         username,
-        firstname,
         lastname,
-        hashedPassword: hashedPassword,
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        firstname: true,
-        lastname: true,
-        createdAt: true,
+        firstname,
       },
     });
-    console.log(user);
-    return res.status(201).json({
-      message: "Account created successfully.",
-      user,
+
+    const { session, accessToken, refreshToken } = await createSession(user);
+    setAuthCookies(res, { accessToken, refreshToken, sessionId: session.id });
+
+    return ok(res, 201, "Account created successfully", {
+      user: formatUser(user),
     });
   } catch (err) {
-    console.error("[register] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    console.error("[signup] error:", err);
+    return fail(res, 500, "Internal server error.");
   }
 };
 
-/**
- * POST /api/auth/login
- */
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password, hashedPassword } = req.body;
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required." });
-    }
-    
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password." });
-    }
-    const passwordMatch = await bcrypt.compare(password, user.hashedPassword);  
-    console.log(passwordMatch);
-
-    if (!passwordMatch) {
-      return res.status(401).json({ message: "Invalid email or password." });
+    if ((!username && !email) || (!hashedPassword && !password)) {
+      return fail(res, 400, "Missing input.");
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN },
-    );
-// shorten form of jwt.sign: sign(payload)
-    // Strip password from response
-    const { hashedPassword: _hashedPassword, ...safeUser } = user;
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(username ? [{ username }] : []),
+          ...(email ? [{ email }] : []),
+        ],
+      },
+    });
+    if (!user || !(await passwordMatches(user, { password, hashedPassword }))) {
+      return fail(res, 401, "Incorrect username/password.");
+    }
 
-    return res.status(200).json({
-      message: "Logged in successfully.",
-      token,
-      user: safeUser,
+    const { session, accessToken, refreshToken } = await createSession(user);
+    setAuthCookies(res, { accessToken, refreshToken, sessionId: session.id });
+
+    return ok(res, 200, "Login successful", {
+      user: formatUser(user),
+      accessToken,
     });
   } catch (err) {
     console.error("[login] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    return fail(res, 500, "Internal server error.");
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
+    const sessionId = req.cookies?.[SESSION_ID_COOKIE] || getRefreshPayload(refreshToken)?.sessionId;
+
+    if (!refreshToken || !sessionId) {
+      return fail(res, 401, "Token not found in cookie.");
+    }
+
+    await prisma.session.deleteMany({ where: { id: sessionId } });
+    clearAuthCookies(res);
+
+    return ok(res, 200, "Logged out successfully");
+  } catch (err) {
+    console.error("[logout] error:", err);
+    return fail(res, 500, "Internal server error.");
+  }
+};
+
+export const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
+    if (!refreshToken) {
+      return fail(res, 401, "Token not found in cookie.");
+    }
+
+    const session = await findValidSession(refreshToken);
+    if (!session) {
+      clearAuthCookies(res);
+      return fail(res, 403, "Refresh token expired or invalid.");
+    }
+
+    const accessToken = signAccessToken(session.user, session.id);
+    setAuthCookies(res, { accessToken });
+
+    return ok(res, 200, undefined, {
+      accessToken,
+      sessionId: session.id,
+    });
+  } catch (err) {
+    console.error("[refresh] error:", err);
+    return fail(res, 500, "Internal server error.");
   }
 };
 
@@ -151,7 +298,7 @@ export const getMe = async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser?.id) {
-      return res.status(401).json({ message: "Please sign in." });
+      return fail(res, 401, "Please sign in.");
     }
 
     const user = await prisma.user.findUnique({
@@ -159,13 +306,13 @@ export const getMe = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: "User not found." });
+      return fail(res, 404, "User not found.");
     }
 
-    return res.json({ data: formatUser(user) });
+    return ok(res, 200, undefined, formatUser(user));
   } catch (err) {
     console.error("[getMe] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    return fail(res, 500, "Internal server error.");
   }
 };
 
@@ -173,7 +320,7 @@ export const updateMe = async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser?.id) {
-      return res.status(401).json({ message: "Please sign in." });
+      return fail(res, 401, "Please sign in.");
     }
 
     const firstname = String(req.body.firstname || "").trim();
@@ -182,7 +329,7 @@ export const updateMe = async (req, res) => {
     const avatar = req.body.avatar === null ? null : String(req.body.avatar || "").trim();
 
     if (!firstname || !lastname || !username) {
-      return res.status(400).json({ message: "Firstname, lastname and username are required." });
+      return fail(res, 400, "Firstname, lastname and username are required.");
     }
 
     const existing = await prisma.user.findFirst({
@@ -193,7 +340,7 @@ export const updateMe = async (req, res) => {
     });
 
     if (existing) {
-      return res.status(409).json({ message: "Username is already in use." });
+      return fail(res, 409, "Username is already in use.");
     }
 
     const user = await prisma.user.update({
@@ -206,10 +353,10 @@ export const updateMe = async (req, res) => {
       },
     });
 
-    return res.json({ data: formatUser(user) });
+    return ok(res, 200, undefined, formatUser(user));
   } catch (err) {
     console.error("[updateMe] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    return fail(res, 500, "Internal server error.");
   }
 };
 
@@ -217,71 +364,56 @@ export const changePassword = async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser?.id) {
-      return res.status(401).json({ message: "Please sign in." });
+      return fail(res, 401, "Please sign in.");
     }
 
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: "Current password and new password are required." });
+    const { currentPassword, currentHashedPassword, newPassword, newHashedPassword } = req.body;
+    if ((!currentPassword && !currentHashedPassword) || (!newPassword && !newHashedPassword)) {
+      return fail(res, 400, "Current password and new password are required.");
     }
 
-    if (String(newPassword).length < 6) {
-      return res.status(400).json({ message: "New password must be at least 6 characters long." });
+    if (newPassword && String(newPassword).length < 6) {
+      return fail(res, 400, "New password must be at least 6 characters long.");
     }
 
     const user = await prisma.user.findUnique({ where: { id: authUser.id } });
     if (!user) {
-      return res.status(404).json({ message: "User not found." });
+      return fail(res, 404, "User not found.");
     }
 
-    const passwordMatch = await bcrypt.compare(currentPassword, user.hashedPassword);
-    if (!passwordMatch) {
-      return res.status(401).json({ message: "Current password is not correct." });
+    if (!(await passwordMatches(user, { password: currentPassword, hashedPassword: currentHashedPassword }))) {
+      return fail(res, 401, "Current password is not correct.");
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    const nextHashedPassword = newHashedPassword || await bcrypt.hash(newPassword, Number(SALT_ROUNDS));
     await prisma.user.update({
       where: { id: authUser.id },
-      data: { hashedPassword },
+      data: { hashedPassword: nextHashedPassword },
     });
 
-    return res.json({ data: { ok: true } });
+    return ok(res, 200, undefined, { ok: true });
   } catch (err) {
     console.error("[changePassword] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    return fail(res, 500, "Internal server error.");
   }
 };
 
-/**
- * POST /api/auth/forgot-password (MOCK)
- * Does NOT send an actual email. Just verifies email existence.
- */
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ message: "Email is required." });
+      return fail(res, 400, "Email is required.");
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-
-    // For security, return the same generic message whether or not the user exists.
-    // (Prevents user enumeration.)
-    if (!user) {
-      return res.status(200).json({
-        message: "If the email matches an account, a reset link has been sent.",
-      });
+    if (user) {
+      console.log(`[forgotPassword] Mock reset link generated for ${email}`);
     }
 
-    // MOCK: pretend we sent an email
-    console.log(`[forgotPassword] Mock reset link generated for ${email}`);
-
-    return res.status(200).json({
-      message: "Password reset link has been sent to your email.",
-    });
+    return ok(res, 200, "If the email matches an account, a reset link has been sent.");
   } catch (err) {
     console.error("[forgotPassword] error:", err);
-    return res.status(500).json({ message: "Internal server error." });
+    return fail(res, 500, "Internal server error.");
   }
 };
