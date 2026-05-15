@@ -34,13 +34,28 @@ export const getStoredAccessToken = () => {
   return session?.accessToken || session?.token || localStorage.getItem('token');
 };
 
+export const getStoredUser = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const user = localStorage.getItem('user');
+    const parsed = user ? JSON.parse(user) : null;
+    console.log("getStoredUser():", parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 export const storeSession = (state) => {
   if (typeof window === 'undefined') return;
   if (state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     const accessToken = state.accessToken || state.token;
     if (accessToken) localStorage.setItem('token', accessToken);
-    if (state.user) localStorage.setItem('user', JSON.stringify(state.user));
+    if (state.user) {
+      localStorage.setItem('user', JSON.stringify(state.user));
+      console.log("Saved user to localStorage:", state.user);
+    }
   } else {
     localStorage.removeItem(STORAGE_KEY);
   }

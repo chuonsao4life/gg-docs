@@ -4,7 +4,27 @@ import React from "react"
 import { Editor } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Bold, Italic, Underline, Undo, Redo, Image as ImageIcon, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus, AlignCenter, AlignRight } from "lucide-react"
+import { Bold, Italic, Underline, Undo, Redo, Image as ImageIcon, Link, MessageSquare, AlignLeft, List, ListOrdered, CheckSquare, Minus, Plus, AlignCenter, AlignRight, Type, Highlighter } from "lucide-react"
+
+const TextColorIcon = ({ color }: { color: string }) => (
+  <div className="relative flex flex-col items-center">
+    <Type className="h-4 w-4" /> {/* Dùng icon Type cho chuẩn Docs */}
+    <div 
+      className="absolute -bottom-[2px] h-[3px] w-full rounded-full" 
+      style={{ backgroundColor: color || "#000" }} 
+    />
+  </div>
+);
+
+const HighlightIcon = ({ color }: { color: string }) => (
+  <div className="relative flex flex-col items-center">
+    <Highlighter className="h-4 w-4" />
+    <div 
+      className="absolute -bottom-[2px] h-[3px] w-full rounded-full" 
+      style={{ backgroundColor: color || "transparent" }} 
+    />
+  </div>
+);
 
 export type EditorToolbarProps = {
     editor: Editor | null

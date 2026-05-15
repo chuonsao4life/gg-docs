@@ -33,7 +33,7 @@
     "**/*.mts",
     "**/*.ts",
     "**/*.tsx"
-  ],
+, "src/components/editor/extensions/Indent"  ],
   "exclude": [
     "node_modules"
   ]
