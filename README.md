@@ -53,7 +53,7 @@ npm install
 ```bash
 # Server
 cd ../server
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 
