@@ -5,11 +5,13 @@ import {
   deleteComment,
   deleteDocument,
   getDocument,
+  getDocumentSnapshot,
   getShareSettings,
   listComments,
   listDocuments,
   listTemplates,
   renameDocument,
+  saveDocumentSnapshot,
   updateShareSettings,
 } from "../controllers/document.controller.js";
 
@@ -21,6 +23,8 @@ router.post("/", createDocument);
 router.get("/:documentId", getDocument);
 router.patch("/:documentId", renameDocument);
 router.delete("/:documentId", deleteDocument);
+router.get("/:documentId/snapshot", getDocumentSnapshot);
+router.put("/:documentId/snapshot", saveDocumentSnapshot);
 router.get("/:documentId/share", getShareSettings);
 router.patch("/:documentId/share", updateShareSettings);
 router.get("/:documentId/comments", listComments);

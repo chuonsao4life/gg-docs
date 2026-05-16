@@ -22,16 +22,27 @@ export function Navbar({
     onToggleComments?: () => void
 }) {
     const router = useRouter()
-    const [saving] = useState(false)
+    const [saving, setSaving] = useState(false)
     const [editing, setEditing] = useState(false)
     const [name, setName] = useState(title)
+    const [renameError, setRenameError] = useState("")
 
     async function commitName() {
         const nextName = name.trim() || title
         setName(nextName)
         setEditing(false)
         if (nextName !== title) {
-            await onRename?.(nextName)
+            setSaving(true)
+            setRenameError("")
+            try {
+                await onRename?.(nextName)
+            } catch (error) {
+                setName(title)
+                setRenameError(error instanceof Error ? error.message : "Không thể đổi tên tài liệu.")
+                console.warn("Unable to rename document", error)
+            } finally {
+                setSaving(false)
+            }
         }
     }
 
@@ -75,7 +86,9 @@ export function Navbar({
                             >
                                 {name}
                             </h1>
-                            <span className="hidden text-xs text-slate-500 sm:inline">{saving ? "Đang lưu..." : "Đã lưu"}</span>
+                            <span className={`hidden text-xs sm:inline ${renameError ? "text-red-500" : "text-slate-500"}`}>
+                                {renameError || (saving ? "Đang lưu..." : "Đã lưu")}
+                            </span>
                         </div>
                     )}
                 </div>

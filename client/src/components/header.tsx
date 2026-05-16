@@ -35,7 +35,7 @@ export function Header() {
               <Users className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="hidden text-xl font-bold text-foreground sm:inline-block">
-              Hệ thống làm việc cộng tác
+              Collaborative Workspaces
             </span>
             <span className="text-xl font-bold text-foreground sm:hidden">
               CoWorkHub
@@ -52,14 +52,6 @@ export function Header() {
           <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
             <LayoutGrid className="h-4 w-4" />
             Workspace
-          </Link>
-          <Link href="/#calendar" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-            <Calendar className="h-4 w-4" />
-            Lịch
-          </Link>
-          <Link href="#" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-            <Users className="h-4 w-4" />
-            Nhóm
           </Link>
         </nav>
 

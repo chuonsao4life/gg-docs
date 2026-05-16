@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutGrid, List, RefreshCw } from "lucide-react"
 import { ChatPanel } from "@/components/chat-panel"
@@ -39,6 +39,7 @@ export function DocumentDashboard() {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [userInitials, setUserInitials] = useState("T")
+  const [refreshKey, setRefreshKey] = useState(0)
   const localDraftCounter = useRef(0)
 
   useEffect(() => {
@@ -60,33 +61,52 @@ export function DocumentDashboard() {
     return () => { isActive = false }
   }, [])
 
-  useEffect(() => {
-    let isActive = true
-    const timer = window.setTimeout(async () => {
-      setLoading(true)
-      setNotice("")
-      try {
-        const nextDocuments = await listDashboardDocuments({
-          search,
-          owner: ownerFilter,
-          sort: sortMode,
-          order: sortMode === "title" ? "asc" : "desc",
-        })
-        if (isActive) setDocuments(nextDocuments.length > 0 ? nextDocuments : [])
-      } catch (error) {
-        if (isActive) {
-          setDocuments(FALLBACK_DOCUMENTS)
-          setNotice(error instanceof Error ? error.message : "Không thể tải tài liệu, đang hiển thị dữ liệu mẫu.")
-        }
-      } finally {
-        if (isActive) setLoading(false)
+  const loadDocuments = useCallback(async (isActive: () => boolean) => {
+    try {
+      const nextDocuments = await listDashboardDocuments({
+        search,
+        owner: ownerFilter,
+        sort: sortMode,
+        order: sortMode === "title" ? "asc" : "desc",
+      })
+      if (isActive()) setDocuments(nextDocuments.length > 0 ? nextDocuments : [])
+    } catch (error) {
+      if (isActive()) {
+        setDocuments(FALLBACK_DOCUMENTS)
+        setNotice(error instanceof Error ? error.message : "Không thể tải tài liệu, đang hiển thị dữ liệu mẫu.")
       }
-    }, 220)
-    return () => {
-      isActive = false
-      window.clearTimeout(timer)
+    } finally {
+      if (isActive()) setLoading(false)
     }
   }, [ownerFilter, search, sortMode])
+
+  useEffect(() => {
+    let active = true
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setNotice("")
+      void loadDocuments(() => active)
+    }, 220)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [loadDocuments, refreshKey])
+
+  useEffect(() => {
+    const refreshDocuments = () => setRefreshKey((key) => key + 1)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshDocuments()
+    }
+
+    window.addEventListener("focus", refreshDocuments)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener("focus", refreshDocuments)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [])
 
   const filteredFallbackDocuments = useMemo(() => {
     if (!notice || !search.trim()) return documents
@@ -105,6 +125,10 @@ export function DocumentDashboard() {
     setNotice("")
     try {
       const document = await createDashboardDocument({ templateId })
+      setDocuments((currentDocuments) => [
+        document,
+        ...currentDocuments.filter((currentDocument) => currentDocument.id !== document.id),
+      ])
       router.push(`/documents/${document.id}`)
     } catch (error) {
       localDraftCounter.current += 1

@@ -1,3 +1,5 @@
+import { clearSession, refreshSession } from "@/services/auth.service"
+
 export type DashboardTemplate = {
   id: string
   title: string
@@ -62,6 +64,12 @@ export type DocumentComment = {
   user: DashboardUser
 }
 
+export type DocumentSnapshot = {
+  snapshot: string | null
+  version: number
+  createdAt: string | null
+}
+
 type DocumentQuery = {
   search?: string
   owner?: "all" | "me" | "shared"
@@ -94,7 +102,7 @@ function readToken() {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}) {
+async function request<T>(path: string, init: RequestInit = {}, retryOnUnauthorized = true) {
   const token = readToken()
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     credentials: "include",
@@ -114,6 +122,15 @@ async function request<T>(path: string, init: RequestInit = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && retryOnUnauthorized) {
+      try {
+        await refreshSession()
+        return request<T>(path, init, false)
+      } catch {
+        clearSession()
+      }
+    }
+
     throw new Error(payload?.message || `Request failed (${response.status})`)
   }
 
@@ -156,6 +173,17 @@ export async function renameDashboardDocument(documentId: string, title: string)
   return request<DashboardDocument>(`/documents/${documentId}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
+  })
+}
+
+export async function getDocumentSnapshot(documentId: string) {
+  return request<DocumentSnapshot>(`/documents/${documentId}/snapshot`)
+}
+
+export async function saveDocumentSnapshot(documentId: string, snapshot: string) {
+  return request<DocumentSnapshot>(`/documents/${documentId}/snapshot`, {
+    method: "PUT",
+    body: JSON.stringify({ snapshot }),
   })
 }
 

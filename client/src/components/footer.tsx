@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Users, Mail, MapPin, Phone, ExternalLink } from "lucide-react"
+import { Users, Mail, MapPin, ExternalLink } from "lucide-react"
 
 const teamMembers = [
   {
@@ -75,14 +75,10 @@ export function Footer() {
               <div className="flex items-start gap-3">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span className="text-sm text-sidebar-foreground/70">
-                  Đại học Công nghệ Thông tin - ĐHQG TP.HCM
+                  Đại học Bách Khoa Hà Nội 
                   <br />
-                  Khu phố 6, P. Linh Trung, TP. Thủ Đức
+                  Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội
                 </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Phone className="h-4 w-4 shrink-0 text-primary" />
-                <span className="text-sm text-sidebar-foreground/70">+84 123 456 789</span>
               </div>
               <div className="flex items-center gap-3">
                 <Mail className="h-4 w-4 shrink-0 text-primary" />

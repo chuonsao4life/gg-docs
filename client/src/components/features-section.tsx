@@ -27,13 +27,6 @@ const features = [
     iconColor: "text-accent",
   },
   {
-    icon: LayoutGrid,
-    title: "Bảng Kanban",
-    description: "Quản lý dự án theo phương pháp Agile với các cột trạng thái và tính năng kéo thả.",
-    color: "bg-chart-3/10",
-    iconColor: "text-chart-3",
-  },
-  {
     icon: PenTool,
     title: "Whiteboard",
     description: "Bảng trắng số để brainstorm, vẽ sơ đồ và phác thảo ý tưởng cùng nhóm.",

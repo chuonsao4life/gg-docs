@@ -33,14 +33,6 @@ const templates = {
     },
     {
       id: 2,
-      title: "Ghi chú cá nhân",
-      description: "Ghi chú nhanh và quản lý ý tưởng",
-      icon: StickyNote,
-      color: "bg-chart-4/20",
-      iconColor: "text-chart-4",
-    },
-    {
-      id: 3,
       title: "To-do List",
       description: "Danh sách công việc hàng ngày",
       icon: ListTodo,
@@ -48,7 +40,7 @@ const templates = {
       iconColor: "text-primary",
     },
     {
-      id: 4,
+      id: 3,
       title: "Lịch cá nhân",
       description: "Quản lý thời gian và sự kiện",
       icon: Calendar,
@@ -57,15 +49,6 @@ const templates = {
     },
   ],
   workspace: [
-    {
-      id: 5,
-      title: "Bảng Kanban",
-      description: "Quản lý dự án theo cột trạng thái",
-      icon: LayoutGrid,
-      color: "bg-accent/20",
-      iconColor: "text-accent",
-      popular: true,
-    },
     {
       id: 6,
       title: "Whiteboard",
@@ -86,59 +69,9 @@ const templates = {
     },
     {
       id: 8,
-      title: "Bảng tính",
-      description: "Bảng dữ liệu và phân tích",
-      icon: Table2,
-      color: "bg-chart-2/20",
-      iconColor: "text-chart-2",
-    },
-    {
-      id: 9,
-      title: "Sprint Planning",
-      description: "Lập kế hoạch sprint cho Agile/Scrum",
-      icon: ListTodo,
-      color: "bg-chart-4/20",
-      iconColor: "text-chart-4",
-    },
-    {
-      id: 10,
       title: "Presentation",
       description: "Tạo bài thuyết trình nhóm",
       icon: Presentation,
-      color: "bg-chart-5/20",
-      iconColor: "text-chart-5",
-    },
-  ],
-  schedule: [
-    {
-      id: 11,
-      title: "Lịch nhóm",
-      description: "Xem lịch làm việc chung của nhóm",
-      icon: Calendar,
-      color: "bg-primary/20",
-      iconColor: "text-primary",
-    },
-    {
-      id: 12,
-      title: "Timeline dự án",
-      description: "Biểu đồ Gantt cho dự án",
-      icon: Clock,
-      color: "bg-accent/20",
-      iconColor: "text-accent",
-    },
-    {
-      id: 13,
-      title: "Meeting Schedule",
-      description: "Lên lịch họp và theo dõi cuộc họp",
-      icon: Users,
-      color: "bg-chart-3/20",
-      iconColor: "text-chart-3",
-    },
-    {
-      id: 14,
-      title: "Deadline Tracker",
-      description: "Theo dõi deadline và milestone",
-      icon: ListTodo,
       color: "bg-chart-5/20",
       iconColor: "text-chart-5",
     },
@@ -172,14 +105,10 @@ export function TemplatesSection() {
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Workspace</span>
           </TabsTrigger>
-          <TabsTrigger value="schedule" className="flex-1 gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Lịch trình</span>
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="personal">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {templates.personal.map((template) => (
               <TemplateCard
                 key={template.id}
@@ -194,19 +123,6 @@ export function TemplatesSection() {
         <TabsContent value="workspace">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {templates.workspace.map((template) => (
-              <TemplateCard
-                key={template.id}
-                template={template}
-                isSelected={selectedTemplate === template.id}
-                onClick={() => handleTemplateClick(template.id)}
-              />
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="schedule">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {templates.schedule.map((template) => (
               <TemplateCard
                 key={template.id}
                 template={template}

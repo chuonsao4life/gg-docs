@@ -8,6 +8,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 const SHARE_ROLES = new Set(["viewer", "commenter", "editor"]);
+const SNAPSHOT_RETENTION_LIMIT = 50;
 
 const DOCUMENT_TEMPLATES = [
   {
@@ -143,6 +144,22 @@ function formatComment(comment) {
   };
 }
 
+function formatSnapshot(snapshot) {
+  if (!snapshot) {
+    return {
+      snapshot: null,
+      version: 0,
+      createdAt: null,
+    };
+  }
+
+  return {
+    snapshot: Buffer.from(snapshot.snapshotData).toString("base64"),
+    version: snapshot.version,
+    createdAt: snapshot.createdAt,
+  };
+}
+
 function canReadDocument(document, authUser) {
   return (
     document.isPublic ||
@@ -165,6 +182,28 @@ function canCommentDocument(document, authUser) {
 function canEditDocument(document, authUser) {
   const role = getRoleForUser(document, authUser);
   return role === "owner" || role === "editor";
+}
+
+async function pruneOldSnapshots(tx, documentId, keep = SNAPSHOT_RETENTION_LIMIT) {
+  const oldSnapshots = await tx.snapshot.findMany({
+    where: { documentId },
+    orderBy: [
+      { version: "desc" },
+      { createdAt: "desc" },
+    ],
+    skip: keep,
+    select: { id: true },
+  });
+
+  if (oldSnapshots.length === 0) return;
+
+  await tx.snapshot.deleteMany({
+    where: {
+      id: {
+        in: oldSnapshots.map((snapshot) => snapshot.id),
+      },
+    },
+  });
 }
 
 export const listTemplates = async (_req, res) => {
@@ -370,6 +409,111 @@ export const deleteDocument = async (req, res) => {
   } catch (err) {
     console.error("[deleteDocument] error:", err);
     return res.status(500).json({ message: "Unable to delete document." });
+  }
+};
+
+export const getDocumentSnapshot = async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    const document = await prisma.document.findUnique({
+      where: { id: req.params.documentId },
+      include: {
+        permissions: true,
+      },
+    });
+
+    if (!document) {
+      return res.status(404).json({ message: "Document not found." });
+    }
+
+    if (!canReadDocument(document, authUser)) {
+      return res.status(403).json({ message: "You do not have access to this document." });
+    }
+
+    const snapshot = await prisma.snapshot.findFirst({
+      where: { documentId: req.params.documentId },
+      orderBy: [
+        { version: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
+
+    return res.json({ data: formatSnapshot(snapshot) });
+  } catch (err) {
+    console.error("[getDocumentSnapshot] error:", err);
+    return res.status(500).json({ message: "Unable to load document snapshot." });
+  }
+};
+
+export const saveDocumentSnapshot = async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser?.id) {
+      return res.status(401).json({ message: "Please sign in to save this document." });
+    }
+
+    const document = await prisma.document.findUnique({
+      where: { id: req.params.documentId },
+      include: {
+        permissions: true,
+      },
+    });
+
+    if (!document) {
+      return res.status(404).json({ message: "Document not found." });
+    }
+
+    if (!canEditDocument(document, authUser)) {
+      return res.status(403).json({ message: "You do not have permission to save this document." });
+    }
+
+    const snapshotBase64 = String(req.body.snapshot || "");
+    if (!snapshotBase64) {
+      return res.status(400).json({ message: "Snapshot payload is required." });
+    }
+
+    let snapshotData;
+    try {
+      snapshotData = Buffer.from(snapshotBase64, "base64");
+    } catch {
+      return res.status(400).json({ message: "Snapshot payload is invalid." });
+    }
+
+    if (snapshotData.length === 0) {
+      return res.status(400).json({ message: "Snapshot payload is empty." });
+    }
+
+    const latest = await prisma.snapshot.findFirst({
+      where: { documentId: req.params.documentId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+
+    const version = (latest?.version || 0) + 1;
+    const savedSnapshot = await prisma.$transaction(async (tx) => {
+      const snapshot = await tx.snapshot.create({
+        data: {
+          version,
+          snapshotData,
+          documentId: req.params.documentId,
+          createdBy: authUser.id,
+        },
+      });
+
+      await tx.document.update({
+        where: { id: req.params.documentId },
+        data: { updatedAt: new Date() },
+      });
+
+      await pruneOldSnapshots(tx, req.params.documentId);
+
+      return snapshot;
+    });
+
+    return res.status(201).json({ data: formatSnapshot(savedSnapshot) });
+  } catch (err) {
+    console.error("[saveDocumentSnapshot] error:", err);
+    return res.status(500).json({ message: "Unable to save document snapshot." });
   }
 };
 
