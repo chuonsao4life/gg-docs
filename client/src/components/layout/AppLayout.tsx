@@ -14,8 +14,10 @@ import type { DocumentComment } from "@/types/comment"
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 import { CommentPanel } from "@/components/comments/CommentPanel"
 import { createDocumentComment, deleteDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
-import { commentService } from "@/lib/commentService"
 
+function getCommentErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback
+}
 
 export function AppLayout({
     children,
@@ -31,33 +33,50 @@ export function AppLayout({
     const [activeMenu, setActiveMenu] = useState<EditorMenuKey>("format")
     const [selectedRange, setSelectedRange] = useState<EditorSelectionRange | null>(null)
     const [comments, setComments] = useState<DocumentComment[]>([])
+    const [isLoadingComments, setIsLoadingComments] = useState(false)
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+    const [commentError, setCommentError] = useState<string | null>(null)
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(false)
     const [isComposerOpen, setIsComposerOpen] = useState(false)
     const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
     const [commentDraftRange, setCommentDraftRange] = useState<EditorSelectionRange | null>(null)
     const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
     const [showMarginControls, setShowMarginControls] = useState(false)
+    const commentLoadRequestRef = useRef(0)
     const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set())
     const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set())
+    const deletingCommentIdsRef = useRef<Set<string>>(new Set())
 
-    useEffect(() => {
-        let active = true
+    const loadComments = useCallback(async () => {
+        const requestId = commentLoadRequestRef.current + 1
+        commentLoadRequestRef.current = requestId
+        setIsLoadingComments(true)
+        setCommentError(null)
 
-        listDocumentComments(documentId)
-            .then((nextComments) => {
-                if (active) setComments(nextComments)
-            })
-            .catch((error) => {
-                console.warn("Unable to load comments", error)
-                commentService.getComments(documentId).then((nextComments) => {
-                    if (active) setComments(nextComments)
-                })
-            })
-
-        return () => {
-            active = false
+        try {
+            const nextComments = await listDocumentComments(documentId)
+            if (commentLoadRequestRef.current !== requestId) return
+            setComments(nextComments)
+        } catch (error) {
+            if (commentLoadRequestRef.current !== requestId) return
+            console.warn("Unable to load comments", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to load comments."))
+        } finally {
+            if (commentLoadRequestRef.current === requestId) {
+                setIsLoadingComments(false)
+            }
         }
     }, [documentId])
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            void loadComments()
+        }, 0)
+
+        return () => {
+            window.clearTimeout(timeoutId)
+        }
+    }, [loadComments])
 
     const handleChangeMenu = (menu: EditorMenuKey) => {
         console.log("Active menu:", menu)
@@ -124,10 +143,8 @@ export function AppLayout({
 
     const deleteComment = useCallback(async (commentId: string) => {
         try {
-            await deleteDocumentComment(documentId, commentId).catch((error) => {
-                console.warn("Unable to delete comment through API, using local fallback", error)
-                return commentService.deleteComment(commentId)
-            })
+            setCommentError(null)
+            await deleteDocumentComment(documentId, commentId)
             removeCommentMarkById(commentId)
             syncedCommentMarkIdsRef.current.delete(commentId)
             recentlyCreatedCommentIdsRef.current.delete(commentId)
@@ -136,6 +153,7 @@ export function AppLayout({
             clearDraftComment()
         } catch (error) {
             console.warn("Unable to delete comment", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to delete comment."))
         }
     }, [clearDraftComment, documentId, removeCommentMarkById])
 
@@ -194,6 +212,7 @@ export function AppLayout({
         existingCommentIds.forEach((commentId) => {
             syncedCommentMarkIdsRef.current.add(commentId)
             recentlyCreatedCommentIdsRef.current.delete(commentId)
+            deletingCommentIdsRef.current.delete(commentId)
         })
 
         const removedIds = comments
@@ -202,7 +221,10 @@ export function AppLayout({
                     return false
                 }
 
-                return !recentlyCreatedCommentIdsRef.current.has(comment.id)
+                return (
+                    !recentlyCreatedCommentIdsRef.current.has(comment.id) &&
+                    !deletingCommentIdsRef.current.has(comment.id)
+                )
             })
             .map((comment) => comment.id)
 
@@ -210,13 +232,26 @@ export function AppLayout({
 
         const removedIdSet = new Set(removedIds)
         removedIds.forEach((commentId) => {
+            deletingCommentIdsRef.current.add(commentId)
             syncedCommentMarkIdsRef.current.delete(commentId)
             recentlyCreatedCommentIdsRef.current.delete(commentId)
         })
         setComments((prev) => prev.filter((comment) => !removedIdSet.has(comment.id)))
         setActiveCommentId((current) => current && removedIdSet.has(current) ? null : current)
 
-    }, [comments])
+        void Promise.allSettled(
+            removedIds.map((commentId) => deleteDocumentComment(documentId, commentId)),
+        ).then((results) => {
+            removedIds.forEach((commentId) => {
+                deletingCommentIdsRef.current.delete(commentId)
+            })
+
+            if (results.some((result) => result.status === "rejected")) {
+                setCommentError("Unable to delete removed comments.")
+                void loadComments()
+            }
+        })
+    }, [comments, documentId, loadComments])
 
     const handleStartCommentFromSelection = () => {
         const browserSelection = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : ""
@@ -241,16 +276,15 @@ export function AppLayout({
         if (!commentDraftRange || !trimmedContent) return
 
         try {
+            setIsSubmittingComment(true)
+            setCommentError(null)
             const commentPayload = {
                 content: trimmedContent,
                 selectedText: commentDraftRange.text,
                 fromPos: commentDraftRange.from,
                 toPos: commentDraftRange.to,
             }
-            const newComment = await createDocumentComment(documentId, commentPayload).catch((error) => {
-                console.warn("Unable to create comment through API, using local fallback", error)
-                return commentService.createComment(documentId, commentPayload)
-            })
+            const newComment = await createDocumentComment(documentId, commentPayload)
 
             if (
                 editor &&
@@ -282,6 +316,10 @@ export function AppLayout({
             setCommentDraftRange(null)
         } catch (error) {
             console.warn("Unable to create comment", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to create comment."))
+            throw error
+        } finally {
+            setIsSubmittingComment(false)
         }
     }
 
@@ -496,9 +534,13 @@ export function AppLayout({
                             <CommentPanel
                                 documentId={documentId}
                                 comments={comments}
+                                errorMessage={commentError}
                                 draftRange={commentDraftRange}
                                 isComposerOpen={isComposerOpen}
+                                isLoading={isLoadingComments}
+                                isSubmitting={isSubmittingComment}
                                 activeCommentId={activeCommentId}
+                                onRetry={loadComments}
                                 onClose={() => {
                                     setIsCommentPanelOpen(false)
                                     clearDraftComment()

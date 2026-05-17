@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Download, FileText, LogOut, MessageSquareText } from "lucide-react"
+import { Download, FileText, LogOut, MessageSquareText, Wifi, WifiOff } from "lucide-react"
 import { ShareDialog } from "@/components/editor/ShareDialog"
 import { getStoredUser, logoutUser, onSessionChange } from "@/services/auth.service"
 
@@ -49,6 +49,7 @@ export function Navbar({
     const [editing, setEditing] = useState(false)
     const [name, setName] = useState(title)
     const [user, setUser] = useState<StoredUser | null>(() => getStoredUser())
+    const [isOnline, setIsOnline] = useState(true)
 
     useEffect(() => {
         const syncUser = () => setUser(getStoredUser())
@@ -58,6 +59,18 @@ export function Navbar({
         return () => {
             window.removeEventListener("storage", syncUser)
             unsubscribe()
+        }
+    }, [])
+
+    useEffect(() => {
+        const syncNetworkStatus = () => setIsOnline(navigator.onLine)
+        syncNetworkStatus()
+        window.addEventListener("online", syncNetworkStatus)
+        window.addEventListener("offline", syncNetworkStatus)
+
+        return () => {
+            window.removeEventListener("online", syncNetworkStatus)
+            window.removeEventListener("offline", syncNetworkStatus)
         }
     }, [])
 
@@ -136,6 +149,15 @@ export function Navbar({
                     <MessageSquareText className="h-4 w-4" />
                     Bình luận
                 </button>
+                <div
+                    className={`hidden h-9 items-center gap-2 rounded-md px-3 text-sm md:flex ${
+                        isOnline ? "text-emerald-700" : "text-amber-700"
+                    }`}
+                    title={isOnline ? "Online" : "Offline"}
+                >
+                    {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+                    {isOnline ? "Online" : "Offline"}
+                </div>
                 <ShareDialog documentId={documentId} />
                 <button
                     type="button"

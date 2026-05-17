@@ -11,17 +11,22 @@ export function CommentInput({
     draftRange,
 }: {
     onCancel?: () => void
-    onSubmit: (content: string) => void
+    onSubmit: (content: string) => Promise<void> | void
     disabled?: boolean
     draftRange?: EditorSelectionRange | null
 }) {
     const [value, setValue] = useState("")
 
-    function submit() {
+    async function submit() {
         const nextValue = value.trim()
         if (!nextValue) return
-        onSubmit(nextValue)
-        setValue("")
+
+        try {
+            await onSubmit(nextValue)
+            setValue("")
+        } catch {
+            // Keep the draft text so the user can retry after an API error.
+        }
     }
 
     return (
