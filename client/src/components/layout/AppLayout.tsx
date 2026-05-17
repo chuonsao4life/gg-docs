@@ -124,7 +124,10 @@ export function AppLayout({
 
     const deleteComment = useCallback(async (commentId: string) => {
         try {
-            await deleteDocumentComment(documentId, commentId)
+            await deleteDocumentComment(documentId, commentId).catch((error) => {
+                console.warn("Unable to delete comment through API, using local fallback", error)
+                return commentService.deleteComment(commentId)
+            })
             removeCommentMarkById(commentId)
             syncedCommentMarkIdsRef.current.delete(commentId)
             recentlyCreatedCommentIdsRef.current.delete(commentId)

@@ -24,6 +24,7 @@ import FontFamily from '@tiptap/extension-font-family'
 import TextAlign from '@tiptap/extension-text-align'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import { CommentMark } from '@/components/editor/extensions/CommentMark'
 
 type Props = {
     params: Promise<{
@@ -169,6 +170,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         class: 'flex items-start gap-2',
                     },
                 }),
+                CommentMark,
                 Underline,
             ].filter(Boolean) as any,
             immediatelyRender: false,

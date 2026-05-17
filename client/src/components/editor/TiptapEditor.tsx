@@ -117,9 +117,9 @@ export default function TiptapEditor({
     wrapper.querySelectorAll<HTMLElement>("[data-comment-id]").forEach((element) => {
       const isActive = Boolean(activeCommentId) && element.dataset.commentId === activeCommentId
       if (isActive) {
-        element.dataset.activeComment = "true"
+        element.setAttribute("data-active-comment", "true")
       } else {
-        delete element.dataset.activeComment
+        element.removeAttribute("data-active-comment")
       }
     })
   }, [activeCommentId])

@@ -18,9 +18,9 @@ export function CommentInput({
     const [value, setValue] = useState("")
 
     function submit() {
-        const v = value.trim()
-        if (!v) return
-        onSubmit(v)
+        const nextValue = value.trim()
+        if (!nextValue) return
+        onSubmit(nextValue)
         setValue("")
     }
 
@@ -35,12 +35,16 @@ export function CommentInput({
                 className="min-h-[80px] w-full rounded-md border px-3 py-2 text-sm"
                 placeholder="Viết bình luận..."
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(event) => setValue(event.target.value)}
                 disabled={disabled}
             />
             <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={onCancel}>Hủy</Button>
-                <Button size="sm" onClick={submit} disabled={disabled || !value.trim()}>Bình luận</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel}>
+                    Hủy
+                </Button>
+                <Button size="sm" onClick={submit} disabled={disabled || !value.trim()}>
+                    Bình luận
+                </Button>
             </div>
         </div>
     )
