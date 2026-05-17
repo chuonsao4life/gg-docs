@@ -293,20 +293,134 @@ export function AppLayout({
         onSave: () => console.log("save"),
         onUndo: () => editor?.chain().focus().undo().run(),
         onRedo: () => editor?.chain().focus().redo().run(),
-        onBold: () => editor?.chain().focus().toggleBold().run(),
-        onItalic: () => editor?.chain().focus().toggleItalic().run(),
-        onUnderline: () => editor?.chain().focus().toggleUnderline().run(),
+        onBold: () => {
+            const result = editor?.chain().focus().toggleBold().run()
+            console.log("[BOLD]", result ? "Success" : "Failed", editor?.isActive("bold"))
+        },
+        onItalic: () => {
+            const result = editor?.chain().focus().toggleItalic().run()
+            console.log("[ITALIC]", result ? "Success" : "Failed", editor?.isActive("italic"))
+        },
+        onUnderline: () => {
+            const result = editor?.chain().focus().toggleUnderline().run()
+            console.log("[UNDERLINE]", result ? "Success" : "Failed", editor?.isActive("underline"))
+        },
+        onStyleChange: (style: string) => {
+            let result: boolean | undefined = false
+            // Convert UI label to style value
+            const styleMap: { [key: string]: string } = {
+                'Normal text': 'paragraph',
+                'Heading 1': 'h1',
+                'Heading 2': 'h2',
+                'Heading 3': 'h3',
+            }
+            const styleValue = styleMap[style] || style
+            
+            if (styleValue === 'paragraph') {
+                result = editor?.chain().focus().clearNodes().setParagraph().run()
+            } else if (styleValue === 'h1') {
+                result = editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run()
+            } else if (styleValue === 'h2') {
+                result = editor?.chain().focus().clearNodes().toggleHeading({ level: 2 }).run()
+            } else if (styleValue === 'h3') {
+                result = editor?.chain().focus().clearNodes().toggleHeading({ level: 3 }).run()
+            }
+            console.log("[STYLE]", style, "->", styleValue, result ? "Success" : "Failed")
+        },
+        onFontChange: (font: string) => {
+            const result = editor?.chain().focus().setFontFamily(font).run()
+            console.log("[FONT]", font, result ? "Success" : "Failed")
+        },
+        onFontSizeChange: (size: string) => {
+            const result = editor?.chain().focus().setFontSize(`${size}px`).run()
+            console.log("[FONT_SIZE]", size, result ? "Success" : "Failed")
+        },
+        onTextColor: (color: string) => {
+            const result = editor?.chain().focus().setColor(color).run()
+            console.log("[TEXT_COLOR]", color, result ? "Success" : "Failed")
+        },
+        onHighlightColor: (color: string) => {
+            const result = editor?.chain().focus().toggleHighlight({ color }).run()
+            console.log("[HIGHLIGHT]", color, result ? "Success" : "Failed")
+        },
+        onAlignLeft: () => {
+            const result = editor?.chain().focus().setTextAlign('left').run()
+            console.log("[ALIGN_LEFT]", result ? "Success" : "Failed")
+        },
+        onAlignCenter: () => {
+            const result = editor?.chain().focus().setTextAlign('center').run()
+            console.log("[ALIGN_CENTER]", result ? "Success" : "Failed")
+        },
+        onAlignRight: () => {
+            const result = editor?.chain().focus().setTextAlign('right').run()
+            console.log("[ALIGN_RIGHT]", result ? "Success" : "Failed")
+        },
+        onBulletList: () => {
+            const result = editor?.chain().focus().toggleBulletList().run()
+            console.log("[BULLET_LIST]", result ? "Success" : "Failed", editor?.isActive("bulletList"))
+        },
+        onNumberedList: () => {
+            const result = editor?.chain().focus().toggleOrderedList().run()
+            console.log("[ORDERED_LIST]", result ? "Success" : "Failed", editor?.isActive("orderedList"))
+        },
+        onChecklist: () => {
+            const result = editor?.chain().focus().toggleTaskList().run()
+            console.log("[TASK_LIST]", result ? "Success" : "Failed", editor?.isActive("taskList"))
+        },
+        onDecreaseIndent: () => {
+            // Check if can lift
+            if (editor?.can().liftListItem('listItem')) {
+                const result = editor?.chain().focus().liftListItem('listItem').run()
+                console.log("[DECREASE_INDENT]", result ? "Success" : "Failed")
+            } else {
+                console.log("[DECREASE_INDENT] Cannot lift - not in a list item")
+            }
+        },
+        onIncreaseIndent: () => {
+            // Check if can sink
+            if (editor?.can().sinkListItem('listItem')) {
+                const result = editor?.chain().focus().sinkListItem('listItem').run()
+                console.log("[INCREASE_INDENT]", result ? "Success" : "Failed")
+            } else {
+                console.log("[INCREASE_INDENT] Cannot sink - not in a list item or no next item")
+            }
+        },
         onInsertImage: () => console.log("insert image"),
         onInsertLink: () => console.log("insert link"),
         onAddComment: handleStartCommentFromSelection,
         onToggleMarginControls: () => setShowMarginControls((visible) => !visible),
     }
 
+    // Lấy kiểu văn bản hiện tại
+    const getCurrentStyle = () => {
+        if (editor?.isActive('heading', { level: 1 })) return 'h1'
+        if (editor?.isActive('heading', { level: 2 })) return 'h2'
+        if (editor?.isActive('heading', { level: 3 })) return 'h3'
+        return 'paragraph'
+    }
+
+    // Lấy font hiện tại
+    const getCurrentFont = () => {
+        return editor?.getAttributes('textStyle').fontFamily || 'Arial'
+    }
+
+    // Lấy cỡ chữ hiện tại
+    const getCurrentFontSize = () => {
+        return editor?.getAttributes('textStyle').fontSize?.replace('px', '') || '11'
+    }
+
+    // Lấy căn lề hiện tại
+    const getCurrentAlignment = () => {
+        if (editor?.isActive({ textAlign: 'center' })) return 'center'
+        if (editor?.isActive({ textAlign: 'right' })) return 'right'
+        return 'left'
+    }
+
     const toolbarState: EditorToolbarState = {
         zoom: "100%",
-        style: "Normal text",
-        font: "Arial",
-        fontSize: "11",
+        style: getCurrentStyle(),
+        font: getCurrentFont(),
+        fontSize: getCurrentFontSize(),
         showRuler: false,
         showOutline: false,
         showMarginControls,
@@ -317,7 +431,7 @@ export function AppLayout({
             italic: editor?.isActive("italic") || false, 
             underline: editor?.isActive("underline") || false, 
         },
-        activeAlignment: "left",
+        activeAlignment: getCurrentAlignment(),
     }
 
     const editorChildren = React.isValidElement<Record<string, unknown>>(children)

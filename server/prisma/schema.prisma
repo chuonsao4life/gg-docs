@@ -6,6 +6,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum PermissionRole {
+  owner
+  editor
+  viewer
+  commenter
+}
+
 model User {
   id             String       @id @default(uuid())
   email          String       @unique
@@ -21,11 +28,29 @@ model User {
   permissions    Permission[]
   comments       Comment[]
   snapshots      Snapshot[]
+  sessions       Session[]
+}
+
+model Session {
+  id                 String   @id @default(uuid())
+  userID             String
+  user               User     @relation(fields: [userID], references: [id], onDelete: Cascade)
+  expireAt           DateTime
+  hashedRefreshToken String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userID])
+  @@index([expireAt])
 }
 
 model Document {
   id          String       @id @default(uuid())
   title       String       @db.VarChar(200)
+  snapshot    Bytes?
+  snapshotVersion Int      @default(1)
+  folderId    String?
+  isStarred   Boolean      @default(false)
   
   ownerId     String
   owner       User         @relation("DocumentOwner", fields: [ownerId], references: [id])
@@ -39,11 +64,14 @@ model Document {
   permissions Permission[]
   comments    Comment[]
   snapshots   Snapshot[]
+
+  @@index([folderId])
+  @@index([isStarred])
 }
 
 model Permission {
   id          String   @id @default(uuid())
-  role        String   
+  role        PermissionRole
   grantedAt   DateTime @default(now())
 
   userId      String

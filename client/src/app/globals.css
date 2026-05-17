@@ -140,12 +140,13 @@
   }
 }
 
+/* --- TIPTAP COLLABORATION CURSOR CSS --- */
 .collaboration-cursor__caret {
   position: relative;
   margin-left: -1px;
   margin-right: -1px;
-  border-left: 2px solid #ff5733;
-  border-right: 2px solid #ff5733;
+  border-left: 2px solid; 
+  border-right: 2px solid; 
   word-break: normal;
   pointer-events: none;
   height: 1.2em;
@@ -160,15 +161,12 @@
   font-weight: 600;
   line-height: normal;
   user-select: none;
-  background-color: #ff5733;
   color: #fff;
   padding: 0.1rem 0.3rem;
   border-radius: 3px 3px 3px 0;
   white-space: nowrap;
-  /* Đảm bảo label luôn nằm trên cùng */
-  z-index: 50;
+  z-index: 50; 
 }
-
 .comment-highlight {
   cursor: pointer;
   border-radius: 3px;
@@ -194,3 +192,69 @@
   background: #dbeafe;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
 }
+
+/* Tạo class thụt lề cho paragraph thông thường */
+.tiptap p[data-indent="1"] {
+    padding-left: 2rem;
+}
+.tiptap p[data-indent="2"] {
+    padding-left: 4rem;
+}
+
+/* Sửa lỗi căn lề cho List */
+.tiptap ul[style*="text-align: center"],
+.tiptap ol[style*="text-align: center"] {
+    list-style-position: inside;
+}
+
+.tiptap ul[style*="text-align: right"],
+.tiptap ol[style*="text-align: right"] {
+    list-style-position: inside;
+}
+
+ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+ul[data-type="taskList"] p {
+  margin: 0;
+}
+
+ul[data-type="taskList"] li {
+  display: flex;
+}
+
+ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+}
+
+ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+ul[data-type="taskList"] input[type="checkbox"] {
+  cursor: pointer;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--primary);
+}
+
+.tiptap ul, 
+.tiptap ol {
+  padding: 0 1rem;
+  margin: 1.25rem 1rem 1.25rem 0.4rem;
+}
+
+.tiptap li {
+  display: list-item; 
+  margin-bottom: 0.5rem;
+}
+
+.tiptap li > p {
+  display: inline;
+  margin: 0;
+}
+

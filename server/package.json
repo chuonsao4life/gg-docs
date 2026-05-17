@@ -41,7 +41,9 @@
     "@types/helmet": "^0.0.48",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
+    "@types/node": "^25.6.0",
     "dotenv": "^17.4.2",
+    "dotenv-cli": "^11.0.0",
     "nodemon": "^3.1.14",
     "prisma": "^7.8.0"
   }

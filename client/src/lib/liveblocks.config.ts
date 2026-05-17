@@ -10,7 +10,7 @@ type Presence = {
   userInfo: {
     name: string;
     color: string;
-    picture: string;
+    picture?: string;
   };
 };
 

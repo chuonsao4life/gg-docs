@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Download, FileText, MessageSquareText } from "lucide-react"
+import { Download, FileText, LogOut, MessageSquareText } from "lucide-react"
 import { ShareDialog } from "@/components/editor/ShareDialog"
+import { logoutUser } from "@/services/auth.service"
 
 export function Navbar({
     documentId,
@@ -19,6 +21,7 @@ export function Navbar({
     onRename?: (title: string) => Promise<void> | void
     onToggleComments?: () => void
 }) {
+    const router = useRouter()
     const [saving] = useState(false)
     const [editing, setEditing] = useState(false)
     const [name, setName] = useState(title)
@@ -30,6 +33,11 @@ export function Navbar({
         if (nextName !== title) {
             await onRename?.(nextName)
         }
+    }
+
+    async function handleLogout() {
+        await logoutUser()
+        router.replace("/login")
     }
 
     return (
@@ -91,6 +99,14 @@ export function Navbar({
                     Bình luận
                 </button>
                 <ShareDialog documentId={documentId} />
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="hidden h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-red-600 md:flex"
+                >
+                    <LogOut className="h-4 w-4" />
+                    Đăng xuất
+                </button>
                 <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground">M4</AvatarFallback>
                 </Avatar>

@@ -88,7 +88,7 @@ function readToken() {
 
   try {
     const session = JSON.parse(rawSession)
-    return session?.token || null
+    return session?.accessToken || session?.token || null
   } catch {
     return null
   }
@@ -97,6 +97,7 @@ function readToken() {
 async function request<T>(path: string, init: RequestInit = {}) {
   const token = readToken()
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    credentials: "include",
     ...init,
     headers: {
       "Content-Type": "application/json",

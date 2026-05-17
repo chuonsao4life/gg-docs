@@ -28,10 +28,34 @@ export const readStoredSession = () => {
   }
 };
 
+export const getStoredAccessToken = () => {
+  if (typeof window === 'undefined') return null;
+  const session = readStoredSession();
+  return session?.accessToken || session?.token || localStorage.getItem('token');
+};
+
+export const getStoredUser = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const user = localStorage.getItem('user');
+    const parsed = user ? JSON.parse(user) : null;
+    console.log("getStoredUser():", parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 export const storeSession = (state) => {
   if (typeof window === 'undefined') return;
   if (state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const accessToken = state.accessToken || state.token;
+    if (accessToken) localStorage.setItem('token', accessToken);
+    if (state.user) {
+      localStorage.setItem('user', JSON.stringify(state.user));
+      console.log("Saved user to localStorage:", state.user);
+    }
   } else {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -55,7 +79,7 @@ export const onSessionChange = (handler) => {
 
 // --- PHẦN 2: REQUEST WRAPPER LINH HOẠT ---
 
-const request = async (path, init = {}, token = null) => {
+const request = async (path, init = {}, token = null, retryOnUnauthorized = true) => {
   // Gộp header mặc định, header auth và custom header
   const headers = {
     'Content-Type': 'application/json',
@@ -78,6 +102,15 @@ const request = async (path, init = {}, token = null) => {
 
   // Bắt lỗi HTTP Status (ví dụ 401, 500)
   if (!response.ok) {
+    if (response.status === 401 && retryOnUnauthorized && path !== '/auth/refresh' && path !== '/auth/login') {
+      try {
+        const refreshed = await refreshSession();
+        return request(path, init, refreshed?.accessToken, false);
+      } catch {
+        clearSession();
+      }
+    }
+
     const message = payload?.message || `Request failed (${response.status})`;
     const error = new Error(message);
     error.status = response.status;
@@ -97,11 +130,11 @@ const request = async (path, init = {}, token = null) => {
 // --- PHẦN 3: API CỦA CODE 1 VIẾT THEO STYLE MỚI ---
 
 export const registerUser = async (payload) => {
-  // payload: { email, password, username, firstname, lastname }
-  return request('/auth/register', {
+  const data = await request('/auth/signup', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  return data;
 };
 
 export const loginUser = async (payload) => {
@@ -116,6 +149,28 @@ export const loginUser = async (payload) => {
   return data;
 };
 
+export const logoutUser = async () => {
+  try {
+    await request('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }, getStoredAccessToken(), false);
+  } finally {
+    clearSession();
+  }
+};
+
+export const refreshSession = async () => {
+  const data = await request('/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }, null, false);
+
+  const current = readStoredSession() || {};
+  storeSession({ ...current, accessToken: data.accessToken, sessionId: data.sessionId });
+  return data;
+};
+
 export const mockForgotPassword = async (email) => {
   return request('/auth/forgot-password', {
     method: 'POST', // Rút kinh nghiệm từ Code 2, định nghĩa rõ method
@@ -124,29 +179,26 @@ export const mockForgotPassword = async (email) => {
 };
 
 export const getCurrentUser = async () => {
-  const session = readStoredSession();
-  return request('/auth/me', {}, session?.token);
+  return request('/auth/me', {}, getStoredAccessToken());
 };
 
 export const updateCurrentUser = async (payload) => {
-  const session = readStoredSession();
   const user = await request('/auth/me', {
     method: 'PATCH',
     body: JSON.stringify(payload),
-  }, session?.token);
+  }, getStoredAccessToken());
 
+  const session = readStoredSession();
   if (session) {
     storeSession({ ...session, user });
-    localStorage.setItem('user', JSON.stringify(user));
   }
 
   return user;
 };
 
 export const changeCurrentUserPassword = async (payload) => {
-  const session = readStoredSession();
-  return request('/auth/me/password', {
-    method: 'PATCH',
+  return request('/auth/change-password', {
+    method: 'POST',
     body: JSON.stringify(payload),
-  }, session?.token);
+  }, getStoredAccessToken());
 };
