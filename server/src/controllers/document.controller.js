@@ -32,6 +32,19 @@ const updateDocumentSchema = z.object({
   message: "At least one updatable field is required.",
 });
 
+const createCommentSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
+  selectedText: z.string().default(""),
+  fromPos: z.number().int().nonnegative().nullable().optional(),
+  toPos: z.number().int().nonnegative().nullable().optional(),
+}).strict().refine((value) => (
+  value.fromPos == null ||
+  value.toPos == null ||
+  value.fromPos < value.toPos
+), {
+  message: "Invalid comment range.",
+});
+
 function success(res, status, data, message) {
   return res.status(status).json({
     success: true,
@@ -145,6 +158,28 @@ function formatDetailedDocument(document) {
     updatedAt: document.updatedAt,
     snapshot: snapshotToBase64(document.snapshot),
     snapshotVersion: document.snapshotVersion,
+  };
+}
+
+function formatComment(comment) {
+  return {
+    id: comment.id,
+    documentId: comment.documentId,
+    content: comment.content,
+    selectedText: comment.selectedText || "",
+    fromPos: comment.fromPos,
+    toPos: comment.toPos,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    user: {
+      id: comment.user.id,
+      email: comment.user.email,
+      username: comment.user.username,
+      firstname: comment.user.firstname,
+      lastname: comment.user.lastname,
+      avatar: comment.user.avatar ?? null,
+      displayName: userName(comment.user),
+    },
   };
 }
 
@@ -363,6 +398,112 @@ export const deleteDocument = async (req, res) => {
     return success(res, 200, undefined, "Document deleted");
   } catch (err) {
     console.error("[deleteDocument] error:", err);
+    return failure(res, 500, "Internal server error.");
+  }
+};
+
+export const listDocumentComments = async (req, res) => {
+  try {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    if (!document) {
+      return failure(res, 404, "Not found");
+    }
+    if (!role) {
+      return failure(res, 403, "No permission");
+    }
+
+    const comments = await prisma.comment.findMany({
+      where: { documentId: req.params.documentId },
+      include: { user: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return success(res, 200, comments.map(formatComment));
+  } catch (err) {
+    console.error("[listDocumentComments] error:", err);
+    return failure(res, 500, "Internal server error.");
+  }
+};
+
+export const createDocumentComment = async (req, res) => {
+  try {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const parsed = createCommentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return failure(res, 400, "Invalid input");
+    }
+
+    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    if (!document) {
+      return failure(res, 404, "Not found");
+    }
+    if (!COMMENT_ROLES.has(role)) {
+      return failure(res, 403, "No comment permission");
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        documentId: req.params.documentId,
+        userId: authUser.userId,
+        content: parsed.data.content,
+        selectedText: parsed.data.selectedText,
+        fromPos: parsed.data.fromPos ?? null,
+        toPos: parsed.data.toPos ?? null,
+      },
+      include: { user: true },
+    });
+
+    return success(res, 201, formatComment(comment), "Comment created");
+  } catch (err) {
+    console.error("[createDocumentComment] error:", err);
+    return failure(res, 500, "Internal server error.");
+  }
+};
+
+export const deleteDocumentComment = async (req, res) => {
+  try {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const comment = await prisma.comment.findUnique({
+      where: { id: req.params.commentId },
+      include: {
+        document: {
+          include: {
+            owner: true,
+            permissions: {
+              include: { user: true },
+              orderBy: { grantedAt: "asc" },
+            },
+          },
+        },
+      },
+    });
+
+    if (!comment || comment.documentId !== req.params.documentId) {
+      return failure(res, 404, "Not found");
+    }
+
+    const role = getMyRole(comment.document, authUser.userId);
+    if (!role) {
+      return failure(res, 403, "No permission");
+    }
+
+    const canDelete = comment.userId === authUser.userId || comment.document.ownerId === authUser.userId;
+    if (!canDelete) {
+      return failure(res, 403, "Permission denied");
+    }
+
+    await prisma.comment.delete({ where: { id: req.params.commentId } });
+
+    return success(res, 200, { id: req.params.commentId }, "Comment deleted");
+  } catch (err) {
+    console.error("[deleteDocumentComment] error:", err);
     return failure(res, 500, "Internal server error.");
   }
 };
