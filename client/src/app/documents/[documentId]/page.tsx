@@ -24,7 +24,11 @@ import FontFamily from '@tiptap/extension-font-family'
 import TextAlign from '@tiptap/extension-text-align'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import Paragraph from '@tiptap/extension-paragraph'
+import Document from '@tiptap/extension-document'
+import Text from '@tiptap/extension-text'
 import { CommentMark } from '@/components/editor/extensions/CommentMark'
+import { Indent } from "lucide-react"
 
 type Props = {
     params: Promise<{
@@ -136,7 +140,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         class: 'list-decimal list-inside ml-0',
                     },
                 },
-                 listItem: {},
+                listItem: {},
                 } as any),
                 Collaboration.configure({ 
                     document: doc, 
@@ -149,9 +153,26 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         color: userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
                     },
                 }),
+                Indent,
                 TextStyle,
                 FontFamily,
-                FontSize,
+                FontSize.configure({ types: ['textStyle'], }),
+                Document,
+                Paragraph.extend({
+                addAttributes() {
+                    return {
+                    ...this.parent?.(),
+                    fontSize: {
+                        default: '11px',
+                        parseHTML: element => element.style.fontSize,
+                        renderHTML: attributes => {
+                        if (!attributes.fontSize) return {}
+                        return { style: `font-size: ${attributes.fontSize}` }
+                        },
+                    },
+                    }
+                },
+                }),
                 Color.configure({ types: [TextStyle.name] }),
                 Highlight.configure({
                     multicolor: true,

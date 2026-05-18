@@ -373,7 +373,8 @@ export function AppLayout({
             console.log("[FONT]", font, result ? "Success" : "Failed")
         },
         onFontSizeChange: (size: string) => {
-            const result = editor?.chain().focus().setFontSize(`${size}px`).run()
+            const sizeValue = size.replace('px', '')
+            const result = editor?.chain().focus().setFontSize(`${sizeValue}px`).run()
             console.log("[FONT_SIZE]", size, result ? "Success" : "Failed")
         },
         onTextColor: (color: string) => {
@@ -418,7 +419,6 @@ export function AppLayout({
             }
         },
         onIncreaseIndent: () => {
-            // Check if can sink
             if (editor?.can().sinkListItem('listItem')) {
                 const result = editor?.chain().focus().sinkListItem('listItem').run()
                 console.log("[INCREASE_INDENT]", result ? "Success" : "Failed")
