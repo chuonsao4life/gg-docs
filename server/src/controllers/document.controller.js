@@ -170,16 +170,53 @@ function getPermissionFlags(role) {
 }
 
 function formatListDocument(document, userId) {
+  const ownerData = {
+    id: document.owner.id,
+    email: document.owner.email,
+    username: document.owner.username,
+    firstname: document.owner.firstname,
+    lastname: document.owner.lastname,
+    avatar: document.owner.avatar,
+    displayName: [document.owner.firstname, document.owner.lastname]
+      .filter(Boolean)
+      .join(" "),
+    initials:
+      `${document.owner.firstname?.[0] || ""}${document.owner.lastname?.[0] || ""}`.toUpperCase() ||
+      document.owner.username?.slice(0, 2).toUpperCase(),
+  };
+
+  const collaboratorsList =
+    document.permissions
+      ?.filter((p) => p.userId !== userId)
+      .map((p) => ({
+        id: p.user.id,
+        email: p.user.email,
+        username: p.user.username,
+        firstname: p.user.firstname,
+        lastname: p.user.lastname,
+        avatar: p.user.avatar,
+        displayName: [p.user.firstname, p.user.lastname]
+          .filter(Boolean)
+          .join(" "),
+        initials:
+          `${p.user.firstname?.[0] || ""}${p.user.lastname?.[0] || ""}`.toUpperCase() ||
+          p.user.username?.slice(0, 2).toUpperCase(),
+      })) || [];
+
   return {
     id: document.id,
     title: document.title,
-    ownerId: document.ownerId,
-    ownerName: userName(document.owner),
+    type: "document",
+    role: getMyRole(document, userId),
+    owner: ownerData,
+    collaborators: collaboratorsList,
+    collaboratorCount: collaboratorsList.length,
+    isPublic: document.isPublic ?? false,
+    publicRole: document.publicRole ?? null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
-    myRole: getMyRole(document, userId),
-    collaborators: document.permissions?.map(formatCollaborator) || [],
-    isStarred: document.isStarred,
+    openedAt: document.updatedAt,
+    preview: "document",
   };
 }
 
@@ -228,21 +265,25 @@ export const listDocuments = async (req, res) => {
       Math.max(Number.parseInt(req.query.limit || "20", 10), 1),
       100,
     );
-    const sort = String(req.query.sort || "-createdAt");
-    const filter = String(req.query.filter || "all");
+    const sortField = String(req.query.sort || "updatedAt");
+    const order = String(req.query.order || "desc");
+    const owner = String(req.query.owner || "all");
 
-    if (!["owned", "shared", "all"].includes(filter)) {
-      return failure(res, 400, "Invalid filter.");
+    if (!["me", "shared", "all"].includes(owner)) {
+      return failure(res, 400, "Invalid owner filter.");
     }
-    if (!["createdAt", "-createdAt"].includes(sort)) {
-      return failure(res, 400, "Invalid sort.");
+    if (!["createdAt", "updatedAt", "title"].includes(sortField)) {
+      return failure(res, 400, "Invalid sort field.");
+    }
+    if (!["asc", "desc"].includes(order)) {
+      return failure(res, 400, "Invalid order.");
     }
 
     const userId = authUser.userId;
     const accessWhere =
-      filter === "owned"
+      owner === "me"
         ? { ownerId: userId }
-        : filter === "shared"
+        : owner === "shared"
           ? { ownerId: { not: userId }, permissions: { some: { userId } } }
           : {
               OR: [{ ownerId: userId }, { permissions: { some: { userId } } }],
@@ -254,7 +295,7 @@ export const listDocuments = async (req, res) => {
         where: accessWhere,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: sort === "createdAt" ? "asc" : "desc" },
+        orderBy: { [sortField]: order },
         include: {
           owner: true,
           permissions: {
@@ -265,17 +306,11 @@ export const listDocuments = async (req, res) => {
       }),
     ]);
 
-    return success(res, 200, {
-      documents: documents.map((document) =>
-        formatListDocument(document, userId),
-      ),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+    return success(
+      res,
+      200,
+      documents.map((document) => formatListDocument(document, userId)),
+    );
   } catch (err) {
     console.error("[listDocuments] error:", err);
     return failure(res, 500, "Internal server error.");
