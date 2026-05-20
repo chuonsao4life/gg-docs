@@ -13,24 +13,55 @@ const EDIT_ROLES = new Set(["owner", "editor"]);
 const COMMENT_ROLES = new Set(["owner", "editor", "commenter"]);
 
 const DOCUMENT_TEMPLATES = [
-  { id: "blank", title: "Blank document", subtitle: "Start from a blank page", accent: "emerald", preview: "blank" },
-  { id: "meeting-notes", title: "Meeting notes", subtitle: "Agenda, decisions, and next steps", accent: "sky", preview: "notes" },
-  { id: "project-proposal", title: "Project proposal", subtitle: "Goals, scope, and budget", accent: "amber", preview: "proposal" },
-  { id: "report", title: "Report", subtitle: "Summaries and findings", accent: "violet", preview: "report" },
+  {
+    id: "blank",
+    title: "Blank document",
+    subtitle: "Start from a blank page",
+    accent: "emerald",
+    preview: "blank",
+  },
+  {
+    id: "meeting-notes",
+    title: "Meeting notes",
+    subtitle: "Agenda, decisions, and next steps",
+    accent: "sky",
+    preview: "notes",
+  },
+  {
+    id: "project-proposal",
+    title: "Project proposal",
+    subtitle: "Goals, scope, and budget",
+    accent: "amber",
+    preview: "proposal",
+  },
+  {
+    id: "report",
+    title: "Report",
+    subtitle: "Summaries and findings",
+    accent: "violet",
+    preview: "report",
+  },
 ];
 
 const createDocumentSchema = z.object({
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(200).optional(),
   content: z.string().optional(),
   folderId: z.string().uuid().nullable().optional(),
+  templateId: z.string().optional(),
 });
 
-const updateDocumentSchema = z.object({
-  title: z.string().trim().min(1).max(200).optional(),
-  folderId: z.string().uuid().nullable().optional(),
-}).strict().refine((value) => value.title !== undefined || value.folderId !== undefined, {
-  message: "At least one updatable field is required.",
-});
+const updateDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    folderId: z.string().uuid().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.title !== undefined || value.folderId !== undefined,
+    {
+      message: "At least one updatable field is required.",
+    },
+  );
 
 const createCommentSchema = z.object({
   content: z.string().trim().min(1).max(2000),
@@ -98,13 +129,29 @@ function requireUser(req, res) {
   return authUser;
 }
 
+function sanitizeTitle(title) {
+  const trimmed = String(title || "").trim();
+  return trimmed.slice(0, 200);
+}
+
+function getDefaultTitle(templateId) {
+  if (!templateId || templateId === "blank") return "Untitled document";
+  const template = DOCUMENT_TEMPLATES.find((item) => item.id === templateId);
+  return template ? template.title : "Untitled document";
+}
+
 function snapshotToBase64(snapshot) {
   if (!snapshot) return null;
   return Buffer.from(snapshot).toString("base64");
 }
 
 function userName(user) {
-  return [user?.firstname, user?.lastname].filter(Boolean).join(" ") || user?.username || user?.email || "";
+  return (
+    [user?.firstname, user?.lastname].filter(Boolean).join(" ") ||
+    user?.username ||
+    user?.email ||
+    ""
+  );
 }
 
 function formatCollaborator(permission) {
@@ -120,7 +167,10 @@ function formatCollaborator(permission) {
 
 function getMyRole(document, userId) {
   if (document.ownerId === userId) return "owner";
-  return document.permissions?.find((permission) => permission.userId === userId)?.role || null;
+  return (
+    document.permissions?.find((permission) => permission.userId === userId)
+      ?.role || null
+  );
 }
 
 function getPermissionFlags(role) {
@@ -133,16 +183,53 @@ function getPermissionFlags(role) {
 }
 
 function formatListDocument(document, userId) {
+  const ownerData = {
+    id: document.owner.id,
+    email: document.owner.email,
+    username: document.owner.username,
+    firstname: document.owner.firstname,
+    lastname: document.owner.lastname,
+    avatar: document.owner.avatar,
+    displayName: [document.owner.firstname, document.owner.lastname]
+      .filter(Boolean)
+      .join(" "),
+    initials:
+      `${document.owner.firstname?.[0] || ""}${document.owner.lastname?.[0] || ""}`.toUpperCase() ||
+      document.owner.username?.slice(0, 2).toUpperCase(),
+  };
+
+  const collaboratorsList =
+    document.permissions
+      ?.filter((p) => p.userId !== userId)
+      .map((p) => ({
+        id: p.user.id,
+        email: p.user.email,
+        username: p.user.username,
+        firstname: p.user.firstname,
+        lastname: p.user.lastname,
+        avatar: p.user.avatar,
+        displayName: [p.user.firstname, p.user.lastname]
+          .filter(Boolean)
+          .join(" "),
+        initials:
+          `${p.user.firstname?.[0] || ""}${p.user.lastname?.[0] || ""}`.toUpperCase() ||
+          p.user.username?.slice(0, 2).toUpperCase(),
+      })) || [];
+
   return {
     id: document.id,
     title: document.title,
-    ownerId: document.ownerId,
-    ownerName: userName(document.owner),
+    type: "document",
+    role: getMyRole(document, userId),
+    owner: ownerData,
+    collaborators: collaboratorsList,
+    collaboratorCount: collaboratorsList.length,
+    isPublic: document.isPublic ?? false,
+    publicRole: document.publicRole ?? null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
-    myRole: getMyRole(document, userId),
-    collaborators: document.permissions?.map(formatCollaborator) || [],
-    isStarred: document.isStarred,
+    openedAt: document.updatedAt,
+    preview: "document",
   };
 }
 
@@ -209,28 +296,33 @@ export const listDocuments = async (req, res) => {
     if (!authUser) return;
 
     const page = Math.max(Number.parseInt(req.query.page || "1", 10), 1);
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "20", 10), 1), 100);
-    const sort = String(req.query.sort || "-createdAt");
-    const filter = String(req.query.filter || "all");
+    const limit = Math.min(
+      Math.max(Number.parseInt(req.query.limit || "20", 10), 1),
+      100,
+    );
+    const sortField = String(req.query.sort || "updatedAt");
+    const order = String(req.query.order || "desc");
+    const owner = String(req.query.owner || "all");
 
-    if (!["owned", "shared", "all"].includes(filter)) {
-      return failure(res, 400, "Invalid filter.");
+    if (!["me", "shared", "all"].includes(owner)) {
+      return failure(res, 400, "Invalid owner filter.");
     }
-    if (!["createdAt", "-createdAt"].includes(sort)) {
-      return failure(res, 400, "Invalid sort.");
+    if (!["createdAt", "updatedAt", "title"].includes(sortField)) {
+      return failure(res, 400, "Invalid sort field.");
+    }
+    if (!["asc", "desc"].includes(order)) {
+      return failure(res, 400, "Invalid order.");
     }
 
     const userId = authUser.userId;
-    const accessWhere = filter === "owned"
-      ? { ownerId: userId }
-      : filter === "shared"
-        ? { ownerId: { not: userId }, permissions: { some: { userId } } }
-        : {
-            OR: [
-              { ownerId: userId },
-              { permissions: { some: { userId } } },
-            ],
-          };
+    const accessWhere =
+      owner === "me"
+        ? { ownerId: userId }
+        : owner === "shared"
+          ? { ownerId: { not: userId }, permissions: { some: { userId } } }
+          : {
+              OR: [{ ownerId: userId }, { permissions: { some: { userId } } }],
+            };
 
     const [total, documents] = await Promise.all([
       prisma.document.count({ where: accessWhere }),
@@ -238,7 +330,7 @@ export const listDocuments = async (req, res) => {
         where: accessWhere,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: sort === "createdAt" ? "asc" : "desc" },
+        orderBy: { [sortField]: order },
         include: {
           owner: true,
           permissions: {
@@ -249,15 +341,11 @@ export const listDocuments = async (req, res) => {
       }),
     ]);
 
-    return success(res, 200, {
-      documents: documents.map((document) => formatListDocument(document, userId)),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+    return success(
+      res,
+      200,
+      documents.map((document) => formatListDocument(document, userId)),
+    );
   } catch (err) {
     console.error("[listDocuments] error:", err);
     return failure(res, 500, "Internal server error.");
@@ -274,17 +362,22 @@ export const createDocument = async (req, res) => {
       return failure(res, 400, "Invalid input");
     }
 
-    const { title, content, folderId } = parsed.data;
+    const { title, content, folderId, templateId } = parsed.data;
+    const finalTitle = sanitizeTitle(title || getDefaultTitle(templateId));
     const snapshot = content ? Buffer.from(content, "utf8") : null;
 
     const document = await prisma.$transaction(async (tx) => {
       const created = await tx.document.create({
         data: {
-          title,
+          title: finalTitle,
           folderId: folderId || null,
           snapshot,
           snapshotVersion: 1,
           ownerId: authUser.userId,
+          isPublic: false,
+        },
+        include: {
+          owner: true,
         },
       });
 
@@ -299,15 +392,40 @@ export const createDocument = async (req, res) => {
       return created;
     });
 
-    return success(res, 201, {
-      document: {
+    const ownerData = {
+      id: document.owner.id,
+      email: document.owner.email,
+      username: document.owner.username,
+      firstname: document.owner.firstname,
+      lastname: document.owner.lastname,
+      avatar: document.owner.avatar,
+      displayName: [document.owner.firstname, document.owner.lastname]
+        .filter(Boolean)
+        .join(" "),
+      initials:
+        `${document.owner.firstname?.[0] || ""}${document.owner.lastname?.[0] || ""}`.toUpperCase() ||
+        document.owner.username?.slice(0, 2).toUpperCase(),
+    };
+
+    return res.status(201).json({
+      success: true,
+      data: {
         id: document.id,
         title: document.title,
-        ownerId: document.ownerId,
+        type: "document",
+        role: "owner",
+        owner: ownerData,
+        collaborators: [],
+        collaboratorCount: 0,
+        isPublic: document.isPublic ?? false,
+        publicRole: document.publicRole ?? null,
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
+        openedAt: document.updatedAt,
+        preview: "document",
       },
-    }, "Document created");
+      message: "Document created",
+    });
   } catch (err) {
     console.error("[createDocument] error:", err);
     return failure(res, 500, "Internal server error.");
@@ -319,7 +437,10 @@ export const getDocument = async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
 
-    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    const { document, role } = await findAccessibleDocument(
+      req.params.documentId,
+      authUser.userId,
+    );
     if (!document) {
       return failure(res, 404, "Not found");
     }
@@ -348,7 +469,10 @@ export const updateDocumentMetadata = async (req, res) => {
       return failure(res, 400, "Invalid input");
     }
 
-    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    const { document, role } = await findAccessibleDocument(
+      req.params.documentId,
+      authUser.userId,
+    );
     if (!document) {
       return failure(res, 404, "Not found");
     }
@@ -358,7 +482,8 @@ export const updateDocumentMetadata = async (req, res) => {
 
     const data = {};
     if (parsed.data.title !== undefined) data.title = parsed.data.title;
-    if (parsed.data.folderId !== undefined) data.folderId = parsed.data.folderId;
+    if (parsed.data.folderId !== undefined)
+      data.folderId = parsed.data.folderId;
 
     const updated = await prisma.document.update({
       where: { id: req.params.documentId },
@@ -372,9 +497,14 @@ export const updateDocumentMetadata = async (req, res) => {
       },
     });
 
-    return success(res, 200, {
-      document: formatDetailedDocument(updated),
-    }, "Document updated");
+    return success(
+      res,
+      200,
+      {
+        document: formatDetailedDocument(updated),
+      },
+      "Document updated",
+    );
   } catch (err) {
     console.error("[updateDocumentMetadata] error:", err);
     return failure(res, 500, "Internal server error.");
@@ -386,7 +516,10 @@ export const deleteDocument = async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
 
-    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    const { document, role } = await findAccessibleDocument(
+      req.params.documentId,
+      authUser.userId,
+    );
     if (!document) {
       return failure(res, 404, "Not found");
     }
