@@ -304,6 +304,7 @@ export const listDocuments = async (req, res) => {
     const sortField = String(req.query.sort || "updatedAt");
     const order = String(req.query.order || "desc");
     const owner = String(req.query.owner || "all");
+    const search = String(req.query.search || "").trim();
 
     if (!["me", "shared", "all"].includes(owner)) {
       return failure(res, 400, "Invalid owner filter.");
@@ -324,11 +325,24 @@ export const listDocuments = async (req, res) => {
           : {
               OR: [{ ownerId: userId }, { permissions: { some: { userId } } }],
             };
+    const where = {
+      AND: [
+        accessWhere,
+        search
+          ? {
+              title: {
+                contains: search,
+                mode: "insensitive",
+              },
+            }
+          : {},
+      ],
+    };
 
     const [total, documents] = await Promise.all([
-      prisma.document.count({ where: accessWhere }),
+      prisma.document.count({ where }),
       prisma.document.findMany({
-        where: accessWhere,
+        where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { [sortField]: order },

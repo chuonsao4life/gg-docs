@@ -35,12 +35,12 @@ export function DashboardTopBar({
         </nav>
 
         <div className="mx-auto flex max-w-3xl flex-1 items-center">
-          <label className="flex h-12 w-full items-center gap-4 rounded-lg bg-secondary px-4 text-muted-foreground transition focus-within:bg-background focus-within:ring-2 focus-within:ring-primary/25">
+          <label className="flex h-12 w-full cursor-text items-center gap-4 rounded-lg border-2 border-transparent bg-secondary px-4 text-muted-foreground transition focus-within:border-primary focus-within:bg-background focus-within:text-primary focus-within:shadow-sm focus-within:ring-4 focus-within:ring-primary/15">
             <Search className="h-5 w-5 shrink-0" />
             <input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-500"
+              className="h-full min-w-0 flex-1 cursor-text bg-transparent text-base text-slate-900 caret-primary outline-none placeholder:text-slate-500"
               placeholder="Tìm kiếm"
               type="search"
             />

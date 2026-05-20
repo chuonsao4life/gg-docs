@@ -63,11 +63,13 @@ export function DocumentDashboard() {
 
   const loadDocuments = useCallback(async (isActive: () => boolean) => {
     try {
+      const searching = Boolean(search.trim())
+      const effectiveSortMode = searching ? "title" : sortMode
       const nextDocuments = await listDashboardDocuments({
         search,
         owner: ownerFilter,
-        sort: sortMode,
-        order: sortMode === "title" ? "asc" : "desc",
+        sort: effectiveSortMode,
+        order: effectiveSortMode === "title" ? "asc" : "desc",
       })
       if (isActive()) setDocuments(nextDocuments.length > 0 ? nextDocuments : [])
     } catch (error) {
