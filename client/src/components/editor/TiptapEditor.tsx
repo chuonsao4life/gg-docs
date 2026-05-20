@@ -29,6 +29,7 @@ export default function TiptapEditor({
   onCommentMarksChange,
 }: TiptapEditorProps) {
   const editorWrapperRef = useRef<HTMLDivElement>(null)
+  const commentMarksTimeoutRef = useRef<number | null>(null)
 
   const emitSelection = useCallback(() => {
     if (!editor) {
@@ -85,25 +86,61 @@ export default function TiptapEditor({
       return
     }
 
-    editor.on("update", emitCommentMarks)
+    const scheduleCommentMarksEmit = () => {
+      if (commentMarksTimeoutRef.current !== null) {
+        window.clearTimeout(commentMarksTimeoutRef.current)
+      }
+
+      commentMarksTimeoutRef.current = window.setTimeout(() => {
+        commentMarksTimeoutRef.current = null
+        emitCommentMarks()
+      }, 150)
+    }
+
+    const initialScanTimeout = window.setTimeout(emitCommentMarks, 250)
+
+    editor.on("update", scheduleCommentMarksEmit)
     return () => {
-      editor.off("update", emitCommentMarks)
+      window.clearTimeout(initialScanTimeout)
+      if (commentMarksTimeoutRef.current !== null) {
+        window.clearTimeout(commentMarksTimeoutRef.current)
+        commentMarksTimeoutRef.current = null
+      }
+      editor.off("update", scheduleCommentMarksEmit)
     }
   }, [editor, emitCommentMarks, onCommentMarksChange])
 
-  useEffect(() => {
+  const syncActiveCommentHighlight = useCallback(() => {
     const wrapper = editorWrapperRef.current
     if (!wrapper) return
 
     wrapper.querySelectorAll<HTMLElement>("[data-comment-id]").forEach((element) => {
       const isActive = Boolean(activeCommentId) && element.dataset.commentId === activeCommentId
       if (isActive) {
-        element.dataset.activeComment = "true"
+        element.setAttribute("data-active-comment", "true")
       } else {
-        delete element.dataset.activeComment
+        element.removeAttribute("data-active-comment")
       }
     })
   }, [activeCommentId])
+
+  useEffect(() => {
+    syncActiveCommentHighlight()
+
+    const frameId = window.requestAnimationFrame(syncActiveCommentHighlight)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [syncActiveCommentHighlight])
+
+  useEffect(() => {
+    if (!editor) return
+
+    editor.on("update", syncActiveCommentHighlight)
+    editor.on("selectionUpdate", syncActiveCommentHighlight)
+    return () => {
+      editor.off("update", syncActiveCommentHighlight)
+      editor.off("selectionUpdate", syncActiveCommentHighlight)
+    }
+  }, [editor, syncActiveCommentHighlight])
 
   const getCommentIdFromPoint = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (!editor) return null
@@ -146,6 +183,10 @@ export default function TiptapEditor({
           : null
 
     if (!element) return
+
+    if (element.closest("[data-floating-comment-button], [data-comment-panel]")) {
+      return
+    }
 
     const commentElement = element.closest<HTMLElement>("[data-comment-id]")
     const domCommentId = commentElement?.getAttribute("data-comment-id")

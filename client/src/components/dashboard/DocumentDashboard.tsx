@@ -33,7 +33,7 @@ export function DocumentDashboard() {
   const [documents, setDocuments] = useState<DashboardDocument[]>(FALLBACK_DOCUMENTS)
   const [search, setSearch] = useState("")
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>("all")
-  const [sortMode, setSortMode] = useState<SortMode>("updatedAt")
+  const [sortMode, setSortMode] = useState<SortMode>("openedAt")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [loading, setLoading] = useState(true)
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
@@ -206,7 +206,7 @@ export function DocumentDashboard() {
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
                 className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
-                <option value="updatedAt">Mới nhất</option>
+                <option value="openedAt">Mới nhất</option>
                 <option value="title">Tên A-Z</option>
               </select>
 

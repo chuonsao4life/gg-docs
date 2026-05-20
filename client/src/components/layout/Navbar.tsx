@@ -1,12 +1,35 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Download, FileText, LogOut, MessageSquareText } from "lucide-react"
+import { Download, FileText, LogOut, MessageSquareText, Wifi, WifiOff } from "lucide-react"
 import { ShareDialog } from "@/components/editor/ShareDialog"
-import { logoutUser } from "@/services/auth.service"
+import { getStoredUser, logoutUser, onSessionChange } from "@/services/auth.service"
+
+type StoredUser = {
+    firstname?: string
+    lastname?: string
+    username?: string
+    email?: string
+}
+
+function getDisplayName(user: StoredUser | null) {
+    if (!user) return "Người dùng"
+
+    const fullName = [user.firstname, user.lastname].filter(Boolean).join(" ").trim()
+    return fullName || user.username || user.email || "Người dùng"
+}
+
+function getInitials(displayName: string) {
+    return displayName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "U"
+}
 
 export function Navbar({
     documentId,
@@ -25,24 +48,41 @@ export function Navbar({
     const [saving, setSaving] = useState(false)
     const [editing, setEditing] = useState(false)
     const [name, setName] = useState(title)
-    const [renameError, setRenameError] = useState("")
+    const [user, setUser] = useState<StoredUser | null>(() => getStoredUser())
+    const [isOnline, setIsOnline] = useState(true)
+
+    useEffect(() => {
+        const syncUser = () => setUser(getStoredUser())
+        window.addEventListener("storage", syncUser)
+        const unsubscribe = onSessionChange(syncUser)
+
+        return () => {
+            window.removeEventListener("storage", syncUser)
+            unsubscribe()
+        }
+    }, [])
+
+    useEffect(() => {
+        const syncNetworkStatus = () => setIsOnline(navigator.onLine)
+        syncNetworkStatus()
+        window.addEventListener("online", syncNetworkStatus)
+        window.addEventListener("offline", syncNetworkStatus)
+
+        return () => {
+            window.removeEventListener("online", syncNetworkStatus)
+            window.removeEventListener("offline", syncNetworkStatus)
+        }
+    }, [])
+
+    const displayName = useMemo(() => getDisplayName(user), [user])
+    const initials = useMemo(() => getInitials(displayName), [displayName])
 
     async function commitName() {
         const nextName = name.trim() || title
         setName(nextName)
         setEditing(false)
         if (nextName !== title) {
-            setSaving(true)
-            setRenameError("")
-            try {
-                await onRename?.(nextName)
-            } catch (error) {
-                setName(title)
-                setRenameError(error instanceof Error ? error.message : "Không thể đổi tên tài liệu.")
-                console.warn("Unable to rename document", error)
-            } finally {
-                setSaving(false)
-            }
+            await onRename?.(nextName)
         }
     }
 
@@ -67,7 +107,7 @@ export function Navbar({
                         <input
                             className="w-64 max-w-[55vw] rounded-md border px-2 py-1 text-sm font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(event) => setName(event.target.value)}
                             onBlur={commitName}
                             onKeyDown={(event) => {
                                 if (event.key === "Enter") {
@@ -80,14 +120,12 @@ export function Navbar({
                         <div className="flex min-w-0 items-baseline gap-2">
                             <h1
                                 className="max-w-[48vw] cursor-text truncate text-lg font-medium text-slate-800"
-                                onClick={() => {
-                                    setEditing(true)
-                                }}
+                                onClick={() => setEditing(true)}
                             >
                                 {name}
                             </h1>
-                            <span className={`hidden text-xs sm:inline ${renameError ? "text-red-500" : "text-slate-500"}`}>
-                                {renameError || (saving ? "Đang lưu..." : "Đã lưu")}
+                            <span className="hidden text-xs text-slate-500 sm:inline">
+                                {saving ? "Đang lưu..." : "Đã lưu"}
                             </span>
                         </div>
                     )}
@@ -111,6 +149,15 @@ export function Navbar({
                     <MessageSquareText className="h-4 w-4" />
                     Bình luận
                 </button>
+                <div
+                    className={`hidden h-9 items-center gap-2 rounded-md px-3 text-sm md:flex ${
+                        isOnline ? "text-emerald-700" : "text-amber-700"
+                    }`}
+                    title={isOnline ? "Online" : "Offline"}
+                >
+                    {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+                    {isOnline ? "Online" : "Offline"}
+                </div>
                 <ShareDialog documentId={documentId} />
                 <button
                     type="button"
@@ -120,8 +167,8 @@ export function Navbar({
                     <LogOut className="h-4 w-4" />
                     Đăng xuất
                 </button>
-                <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground">M4</AvatarFallback>
+                <Avatar className="h-8 w-8" title={displayName}>
+                    <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
                 </Avatar>
             </div>
         </header>

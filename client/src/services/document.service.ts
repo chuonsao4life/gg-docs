@@ -70,10 +70,28 @@ export type DocumentSnapshot = {
   createdAt: string | null
 }
 
+export type DocumentDetailResponse = {
+  document: Partial<DashboardDocument> & {
+    ownerId?: string
+    ownerName?: string
+    snapshot?: string | null
+    snapshotVersion?: number
+    folderId?: string | null
+    isStarred?: boolean
+  }
+  myPermission?: {
+    role?: string | null
+    canEdit?: boolean
+    canComment?: boolean
+    canShare?: boolean
+  }
+  collaborators?: DashboardUser[]
+}
+
 type DocumentQuery = {
   search?: string
   owner?: "all" | "me" | "shared"
-  sort?: "updatedAt" | "title"
+  sort?: "openedAt" | "updatedAt" | "title"
   order?: "asc" | "desc"
 }
 
@@ -166,11 +184,11 @@ export async function createDashboardDocument({
 }
 
 export async function getDashboardDocument(documentId: string) {
-  return request<DashboardDocument>(`/documents/${documentId}`)
+  return request<DocumentDetailResponse>(`/documents/${documentId}`)
 }
 
 export async function renameDashboardDocument(documentId: string, title: string) {
-  return request<DashboardDocument>(`/documents/${documentId}`, {
+  return request<DocumentDetailResponse>(`/documents/${documentId}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
   })
@@ -223,5 +241,11 @@ export async function createDocumentComment(
   return request<DocumentComment>(`/documents/${documentId}/comments`, {
     method: "POST",
     body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteDocumentComment(documentId: string, commentId: string) {
+  return request<{ id: string }>(`/documents/${documentId}/comments/${commentId}`, {
+    method: "DELETE",
   })
 }

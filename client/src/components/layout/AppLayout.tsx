@@ -13,8 +13,11 @@ import type { EditorSelectionRange } from "@/types/editor-selection"
 import type { DocumentComment } from "@/types/comment"
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout"
 import { CommentPanel } from "@/components/comments/CommentPanel"
-import { createDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
+import { createDocumentComment, deleteDocumentComment, listDocumentComments, renameDashboardDocument } from "@/services/document.service"
 
+function getCommentErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback
+}
 
 export function AppLayout({
     children,
@@ -30,29 +33,50 @@ export function AppLayout({
     const [activeMenu, setActiveMenu] = useState<EditorMenuKey>("format")
     const [selectedRange, setSelectedRange] = useState<EditorSelectionRange | null>(null)
     const [comments, setComments] = useState<DocumentComment[]>([])
+    const [isLoadingComments, setIsLoadingComments] = useState(false)
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+    const [commentError, setCommentError] = useState<string | null>(null)
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(false)
     const [isComposerOpen, setIsComposerOpen] = useState(false)
     const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
     const [commentDraftRange, setCommentDraftRange] = useState<EditorSelectionRange | null>(null)
     const [pageMargins, setPageMargins] = useState<PageMargins>(DEFAULT_PAGE_MARGINS)
     const [showMarginControls, setShowMarginControls] = useState(false)
+    const commentLoadRequestRef = useRef(0)
     const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set())
+    const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set())
+    const deletingCommentIdsRef = useRef<Set<string>>(new Set())
 
-    useEffect(() => {
-        let active = true
+    const loadComments = useCallback(async () => {
+        const requestId = commentLoadRequestRef.current + 1
+        commentLoadRequestRef.current = requestId
+        setIsLoadingComments(true)
+        setCommentError(null)
 
-        listDocumentComments(documentId)
-            .then((nextComments) => {
-                if (active) setComments(nextComments)
-            })
-            .catch((error) => {
-                console.warn("Unable to load comments", error)
-            })
-
-        return () => {
-            active = false
+        try {
+            const nextComments = await listDocumentComments(documentId)
+            if (commentLoadRequestRef.current !== requestId) return
+            setComments(nextComments)
+        } catch (error) {
+            if (commentLoadRequestRef.current !== requestId) return
+            console.warn("Unable to load comments", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to load comments."))
+        } finally {
+            if (commentLoadRequestRef.current === requestId) {
+                setIsLoadingComments(false)
+            }
         }
     }, [documentId])
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            void loadComments()
+        }, 0)
+
+        return () => {
+            window.clearTimeout(timeoutId)
+        }
+    }, [loadComments])
 
     const handleChangeMenu = (menu: EditorMenuKey) => {
         console.log("Active menu:", menu)
@@ -102,12 +126,14 @@ export function AppLayout({
         editor.state.doc.descendants((node: any, position: number) => {
             if (!node.isText) return
 
-            const hasTargetComment = node.marks.some((mark: any) => (
+            const targetCommentMarks = node.marks.filter((mark: any) => (
                 mark.type === commentMark && mark.attrs.commentId === commentId
             ))
-            if (!hasTargetComment) return
+            if (targetCommentMarks.length === 0) return
 
-            transaction = transaction.removeMark(position, position + node.nodeSize, commentMark)
+            targetCommentMarks.forEach((mark: any) => {
+                transaction = transaction.removeMark(position, position + node.nodeSize, mark)
+            })
         })
 
         if (transaction.docChanged) {
@@ -115,30 +141,117 @@ export function AppLayout({
         }
     }, [editor])
 
-    const deleteComment = useCallback((commentId: string) => {
-        removeCommentMarkById(commentId)
-        syncedCommentMarkIdsRef.current.delete(commentId)
-        setComments((prev) => prev.filter((comment) => comment.id !== commentId))
-        setActiveCommentId((current) => current === commentId ? null : current)
-        clearDraftComment()
-    }, [clearDraftComment, removeCommentMarkById])
+    const deleteComment = useCallback(async (commentId: string) => {
+        try {
+            setCommentError(null)
+            await deleteDocumentComment(documentId, commentId)
+            removeCommentMarkById(commentId)
+            syncedCommentMarkIdsRef.current.delete(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+            setComments((prev) => prev.filter((comment) => comment.id !== commentId))
+            setActiveCommentId((current) => current === commentId ? null : current)
+            clearDraftComment()
+        } catch (error) {
+            console.warn("Unable to delete comment", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to delete comment."))
+        }
+    }, [clearDraftComment, documentId, removeCommentMarkById])
+
+    useEffect(() => {
+        if (!editor || comments.length === 0) return
+
+        const commentMark = editor.schema.marks.comment
+        if (!commentMark) return
+
+        const existingCommentIds = new Set<string>()
+        editor.state.doc.descendants((node: any) => {
+            if (!node.isText) return
+
+            node.marks.forEach((mark: any) => {
+                const commentId = mark.attrs.commentId
+                if (
+                    mark.type === commentMark &&
+                    typeof commentId === "string" &&
+                    commentId !== "draft"
+                ) {
+                    existingCommentIds.add(commentId)
+                }
+            })
+        })
+
+        let transaction = editor.state.tr
+
+        comments.forEach((comment) => {
+            if (existingCommentIds.has(comment.id)) return
+            if (
+                typeof comment.fromPos !== "number" ||
+                typeof comment.toPos !== "number" ||
+                comment.fromPos >= comment.toPos ||
+                comment.fromPos < 0 ||
+                comment.toPos > editor.state.doc.content.size
+            ) {
+                return
+            }
+
+            transaction = transaction.addMark(
+                comment.fromPos,
+                comment.toPos,
+                commentMark.create({ commentId: comment.id, isDraft: false }),
+            )
+            existingCommentIds.add(comment.id)
+            syncedCommentMarkIdsRef.current.add(comment.id)
+        })
+
+        if (transaction.docChanged) {
+            editor.view.dispatch(transaction)
+        }
+    }, [editor, comments])
 
     const handleCommentMarksChange = useCallback((existingCommentIds: string[]) => {
         const existingIds = new Set(existingCommentIds)
-        existingCommentIds.forEach((commentId) => syncedCommentMarkIdsRef.current.add(commentId))
+        existingCommentIds.forEach((commentId) => {
+            syncedCommentMarkIdsRef.current.add(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+            deletingCommentIdsRef.current.delete(commentId)
+        })
 
         const removedIds = comments
-            .filter((comment) => syncedCommentMarkIdsRef.current.has(comment.id) && !existingIds.has(comment.id))
+            .filter((comment) => {
+                if (!syncedCommentMarkIdsRef.current.has(comment.id) || existingIds.has(comment.id)) {
+                    return false
+                }
+
+                return (
+                    !recentlyCreatedCommentIdsRef.current.has(comment.id) &&
+                    !deletingCommentIdsRef.current.has(comment.id)
+                )
+            })
             .map((comment) => comment.id)
 
         if (removedIds.length === 0) return
 
         const removedIdSet = new Set(removedIds)
-        removedIds.forEach((commentId) => syncedCommentMarkIdsRef.current.delete(commentId))
+        removedIds.forEach((commentId) => {
+            deletingCommentIdsRef.current.add(commentId)
+            syncedCommentMarkIdsRef.current.delete(commentId)
+            recentlyCreatedCommentIdsRef.current.delete(commentId)
+        })
         setComments((prev) => prev.filter((comment) => !removedIdSet.has(comment.id)))
         setActiveCommentId((current) => current && removedIdSet.has(current) ? null : current)
 
-    }, [comments])
+        void Promise.allSettled(
+            removedIds.map((commentId) => deleteDocumentComment(documentId, commentId)),
+        ).then((results) => {
+            removedIds.forEach((commentId) => {
+                deletingCommentIdsRef.current.delete(commentId)
+            })
+
+            if (results.some((result) => result.status === "rejected")) {
+                setCommentError("Unable to delete removed comments.")
+                void loadComments()
+            }
+        })
+    }, [comments, documentId, loadComments])
 
     const handleStartCommentFromSelection = () => {
         const browserSelection = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : ""
@@ -163,12 +276,15 @@ export function AppLayout({
         if (!commentDraftRange || !trimmedContent) return
 
         try {
-            const newComment = await createDocumentComment(documentId, {
+            setIsSubmittingComment(true)
+            setCommentError(null)
+            const commentPayload = {
                 content: trimmedContent,
                 selectedText: commentDraftRange.text,
                 fromPos: commentDraftRange.from,
                 toPos: commentDraftRange.to,
-            })
+            }
+            const newComment = await createDocumentComment(documentId, commentPayload)
 
             if (
                 editor &&
@@ -176,6 +292,7 @@ export function AppLayout({
                 newComment.toPos !== null &&
                 newComment.fromPos < newComment.toPos
             ) {
+                recentlyCreatedCommentIdsRef.current.add(newComment.id)
                 editor
                     .chain()
                     .focus()
@@ -184,6 +301,9 @@ export function AppLayout({
                     .setMark("comment", { commentId: newComment.id, isDraft: false })
                     .run()
                 syncedCommentMarkIdsRef.current.add(newComment.id)
+                window.setTimeout(() => {
+                    recentlyCreatedCommentIdsRef.current.delete(newComment.id)
+                }, 500)
             } else {
                 removeCommentMark(commentDraftRange)
             }
@@ -196,6 +316,10 @@ export function AppLayout({
             setCommentDraftRange(null)
         } catch (error) {
             console.warn("Unable to create comment", error)
+            setCommentError(getCommentErrorMessage(error, "Unable to create comment."))
+            throw error
+        } finally {
+            setIsSubmittingComment(false)
         }
     }
 
@@ -249,7 +373,8 @@ export function AppLayout({
             console.log("[FONT]", font, result ? "Success" : "Failed")
         },
         onFontSizeChange: (size: string) => {
-            const result = editor?.chain().focus().setFontSize(`${size}px`).run()
+            const sizeValue = size.replace('px', '')
+            const result = editor?.chain().focus().setFontSize(`${sizeValue}px`).run()
             console.log("[FONT_SIZE]", size, result ? "Success" : "Failed")
         },
         onTextColor: (color: string) => {
@@ -294,7 +419,6 @@ export function AppLayout({
             }
         },
         onIncreaseIndent: () => {
-            // Check if can sink
             if (editor?.can().sinkListItem('listItem')) {
                 const result = editor?.chain().focus().sinkListItem('listItem').run()
                 console.log("[INCREASE_INDENT]", result ? "Success" : "Failed")
@@ -410,9 +534,13 @@ export function AppLayout({
                             <CommentPanel
                                 documentId={documentId}
                                 comments={comments}
+                                errorMessage={commentError}
                                 draftRange={commentDraftRange}
                                 isComposerOpen={isComposerOpen}
+                                isLoading={isLoadingComments}
+                                isSubmitting={isSubmittingComment}
                                 activeCommentId={activeCommentId}
+                                onRetry={loadComments}
                                 onClose={() => {
                                     setIsCommentPanelOpen(false)
                                     clearDraftComment()

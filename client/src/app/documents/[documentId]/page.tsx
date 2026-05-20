@@ -24,7 +24,11 @@ import FontFamily from '@tiptap/extension-font-family'
 import TextAlign from '@tiptap/extension-text-align'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import Paragraph from '@tiptap/extension-paragraph'
+import Document from '@tiptap/extension-document'
+import Text from '@tiptap/extension-text'
 import { CommentMark } from '@/components/editor/extensions/CommentMark'
+import { Indent } from "lucide-react"
 
 type Props = {
     params: Promise<{
@@ -33,7 +37,6 @@ type Props = {
 }
 
 const TAB_SESSION_ID = Math.random().toString(36).substring(7);
-const AUTOSAVE_DELAY_MS = 2500;
 
 const CURSOR_COLORS = ['#958DF1', '#F98181', '#FBCE41', '#FFC0CB', '#85C1E9', '#7DCEA0', '#b19cd9', '#f39c12'];
 const getStableColor = (identifier: string) => {
@@ -45,38 +48,12 @@ const getStableColor = (identifier: string) => {
     return CURSOR_COLORS[index];
 };
 
-function base64ToUint8Array(base64: string) {
-    const binary = window.atob(base64)
-    const bytes = new Uint8Array(binary.length)
-
-    for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index)
-    }
-
-    return bytes
-}
-
-function uint8ArrayToBase64(bytes: Uint8Array) {
-    const chunkSize = 0x8000
-    let binary = ""
-
-    for (let index = 0; index < bytes.length; index += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
-    }
-
-    return window.btoa(binary)
-}
-
 function DocumentPageContent({ documentId }: { documentId: string }) {
     const room = useRoom()
     const updateMyPresence = useUpdateMyPresence()
     const doc = useMemo(() => new Y.Doc(), [])
     const [userInfo, setUserInfo] = useState(getStoredUser())
     const [title, setTitle] = useState("Tài liệu chưa có tiêu đề")
-    const [loadedSnapshotDocumentId, setLoadedSnapshotDocumentId] = useState<string | null>(null)
-    const snapshotLoaded = loadedSnapshotDocumentId === documentId
-    const hasPendingSaveRef = useRef(false)
-    const autosaveTimerRef = useRef<number | null>(null)
 
     // Tạo displayName từ available fields
     const displayName = userInfo?.firstname && userInfo?.lastname 
@@ -137,77 +114,9 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
 
     useEffect(() => {
         let active = true
-        hasPendingSaveRef.current = false
-
-        if (autosaveTimerRef.current) {
-            window.clearTimeout(autosaveTimerRef.current)
-            autosaveTimerRef.current = null
-        }
-
-        getDocumentSnapshot(documentId)
-            .then((savedSnapshot) => {
-                if (!active) return
-
-                if (savedSnapshot.snapshot) {
-                    Y.applyUpdate(doc, base64ToUint8Array(savedSnapshot.snapshot))
-                }
-            })
-            .catch((error) => {
-                console.warn("Không thể tải snapshot tài liệu:", error)
-            })
-            .finally(() => {
-                if (active) setLoadedSnapshotDocumentId(documentId)
-            })
-
-        return () => {
-            active = false
-        }
-    }, [documentId, doc])
-
-    useEffect(() => {
-        if (!snapshotLoaded || documentId.startsWith("draft-local-")) return
-
-        const saveSnapshot = async () => {
-            autosaveTimerRef.current = null
-            if (!hasPendingSaveRef.current) return
-
-            try {
-                const update = Y.encodeStateAsUpdate(doc)
-                const savedSnapshot = await saveDocumentSnapshot(documentId, uint8ArrayToBase64(update))
-                hasPendingSaveRef.current = false
-                console.log("Đã autosave snapshot:", savedSnapshot.version)
-            } catch (error) {
-                console.warn("Không thể autosave snapshot:", error)
-            }
-        }
-
-        const scheduleSave = () => {
-            hasPendingSaveRef.current = true
-
-            if (autosaveTimerRef.current) {
-                window.clearTimeout(autosaveTimerRef.current)
-            }
-
-            autosaveTimerRef.current = window.setTimeout(saveSnapshot, AUTOSAVE_DELAY_MS)
-        }
-
-        doc.on("update", scheduleSave)
-
-        return () => {
-            doc.off("update", scheduleSave)
-
-            if (autosaveTimerRef.current) {
-                window.clearTimeout(autosaveTimerRef.current)
-                autosaveTimerRef.current = null
-            }
-        }
-    }, [documentId, doc, snapshotLoaded])
-
-    useEffect(() => {
-        let active = true
         getDashboardDocument(documentId)
-            .then((document) => {
-                if (active) setTitle(document.title)
+            .then((response) => {
+                if (active) setTitle(response.document.title || "Untitled document")
             })
             .catch((error) => {
                 console.warn("Không thể tải thông tin tài liệu:", error)
@@ -231,7 +140,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         class: 'list-decimal list-inside ml-0',
                     },
                 },
-                 listItem: {},
+                listItem: {},
                 } as any),
                 Collaboration.configure({ 
                     document: doc, 
@@ -244,14 +153,30 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         color: userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
                     },
                 }),
+                Indent,
                 TextStyle,
                 FontFamily,
-                FontSize,
+                FontSize.configure({ types: ['textStyle'], }),
+                Document,
+                Paragraph.extend({
+                addAttributes() {
+                    return {
+                    ...this.parent?.(),
+                    fontSize: {
+                        default: '11px',
+                        parseHTML: element => element.style.fontSize,
+                        renderHTML: attributes => {
+                        if (!attributes.fontSize) return {}
+                        return { style: `font-size: ${attributes.fontSize}` }
+                        },
+                    },
+                    }
+                },
+                }),
                 Color.configure({ types: [TextStyle.name] }),
                 Highlight.configure({
                     multicolor: true,
                 }),
-                CommentMark,
                 TextAlign.configure({
                     types: ['heading', 'paragraph', 'bulletList', 'orderedList', 'listItem'],
                 }),
@@ -266,6 +191,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
                         class: 'flex items-start gap-2',
                     },
                 }),
+                CommentMark,
                 Underline,
             ].filter(Boolean) as any,
             immediatelyRender: false,
@@ -290,14 +216,6 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
             }
         }
     }, [displayName, editor, userInfo]);
-
-    if (!snapshotLoaded) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-background">
-                <div className="text-sm text-muted-foreground">Đang khôi phục nội dung tài liệu...</div>
-            </div>
-        )
-    }
 
     return (
         <AppLayout 

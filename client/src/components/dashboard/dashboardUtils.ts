@@ -93,5 +93,5 @@ export function isUserAuthenticated() {
 }
 
 export type OwnerFilter = "all" | "me" | "shared"
-export type SortMode = "updatedAt" | "title"
+export type SortMode = "openedAt" | "title"
 export type ViewMode = "grid" | "list"
