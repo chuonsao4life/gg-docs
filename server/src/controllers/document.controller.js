@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { ROLES } from "../constants/roles.js";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -63,18 +64,23 @@ const updateDocumentSchema = z
     },
   );
 
-const createCommentSchema = z.object({
-  content: z.string().trim().min(1).max(2000),
-  selectedText: z.string().default(""),
-  fromPos: z.number().int().nonnegative().nullable().optional(),
-  toPos: z.number().int().nonnegative().nullable().optional(),
-}).strict().refine((value) => (
-  value.fromPos == null ||
-  value.toPos == null ||
-  value.fromPos < value.toPos
-), {
-  message: "Invalid comment range.",
-});
+const createCommentSchema = z
+  .object({
+    content: z.string().trim().min(1).max(2000),
+    selectedText: z.string().default(""),
+    fromPos: z.number().int().nonnegative().nullable().optional(),
+    toPos: z.number().int().nonnegative().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.fromPos == null ||
+      value.toPos == null ||
+      value.fromPos < value.toPos,
+    {
+      message: "Invalid comment range.",
+    },
+  );
 
 function success(res, status, data, message) {
   return res.status(status).json({
@@ -562,12 +568,454 @@ export const deleteDocument = async (req, res) => {
   }
 };
 
+export const listDocumentPermissions = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    if (!documentId) return failure(res, 400, "documentId is required");
+
+    const permissions = await prisma.permission.findMany({
+      where: { documentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstname: true,
+            lastname: true,
+            avatar: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    return success(
+      res,
+      200,
+      permissions.map((p) => ({
+        id: p.id,
+        role: p.role,
+        grantedAt: p.grantedAt,
+        userId: p.userId,
+        user: p.user,
+      })),
+    );
+  } catch (err) {
+    console.error("[listDocumentPermissions] error:", err);
+    return failure(res, 500, "Internal server error");
+  }
+};
+
+export const shareDocument = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const { documentId } = req.params;
+    const { email, role } = req.body;
+
+    if (!documentId) return failure(res, 400, "documentId is required");
+    if (!email) return failure(res, 400, "email is required");
+    if (!role) return failure(res, 400, "role is required");
+
+    const validRoles = [ROLES.VIEWER, ROLES.COMMENTER, ROLES.EDITOR];
+    if (!validRoles.includes(role)) {
+      return failure(
+        res,
+        400,
+        `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+      );
+    }
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { ownerId: true },
+    });
+    if (!document) return failure(res, 404, "Document not found");
+
+    const targetUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        firstname: true,
+        lastname: true,
+        avatar: true,
+        username: true,
+      },
+    });
+    if (!targetUser) return failure(res, 404, "User not found");
+
+    if (targetUser.id === document.ownerId) {
+      return failure(res, 400, "Cannot share document with the owner");
+    }
+
+    const permission = await prisma.permission.upsert({
+      where: {
+        userId_documentId: {
+          userId: targetUser.id,
+          documentId,
+        },
+      },
+      update: { role },
+      create: {
+        role,
+        userId: targetUser.id,
+        documentId,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    return success(
+      res,
+      201,
+      {
+        id: permission.id,
+        role: permission.role,
+        grantedAt: permission.grantedAt,
+        userId: permission.userId,
+        user: targetUser,
+      },
+      "Document shared successfully",
+    );
+  } catch (err) {
+    console.error("[shareDocument] error:", err);
+    return failure(res, 500, "Internal server error");
+  }
+};
+
+export const updateDocumentPermission = async (req, res) => {
+  try {
+    const { documentId, userId } = req.params;
+    const { role } = req.body;
+
+    if (!documentId) return failure(res, 400, "documentId is required");
+    if (!userId) return failure(res, 400, "userId is required");
+    if (!role) return failure(res, 400, "role is required");
+
+    const validRoles = [ROLES.VIEWER, ROLES.COMMENTER, ROLES.EDITOR];
+    if (!validRoles.includes(role)) {
+      return failure(
+        res,
+        400,
+        `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+      );
+    }
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { ownerId: true },
+    });
+    if (!document) return failure(res, 404, "Document not found");
+
+    if (userId === document.ownerId) {
+      return failure(res, 400, "Cannot update owner's permission");
+    }
+
+    const updatedPermission = await prisma.permission.update({
+      where: {
+        userId_documentId: {
+          userId,
+          documentId,
+        },
+      },
+      data: { role },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstname: true,
+            lastname: true,
+            avatar: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    return success(
+      res,
+      200,
+      {
+        id: updatedPermission.id,
+        role: updatedPermission.role,
+        grantedAt: updatedPermission.grantedAt,
+        userId: updatedPermission.userId,
+        user: updatedPermission.user,
+      },
+      "Permission updated successfully",
+    );
+  } catch (err) {
+    console.error("[updateDocumentPermission] error:", err);
+    if (err.code === "P2025") {
+      return failure(res, 404, "Permission not found");
+    }
+    return failure(res, 500, "Internal server error");
+  }
+};
+
+export const deleteDocumentPermission = async (req, res) => {
+  try {
+    const { documentId, userId } = req.params;
+
+    if (!documentId) return failure(res, 400, "documentId is required");
+    if (!userId) return failure(res, 400, "userId is required");
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { ownerId: true },
+    });
+    if (!document) return failure(res, 404, "Document not found");
+
+    if (userId === document.ownerId) {
+      return failure(res, 400, "Cannot revoke owner's access");
+    }
+
+    await prisma.permission.delete({
+      where: {
+        userId_documentId: {
+          userId,
+          documentId,
+        },
+      },
+    });
+
+    return success(res, 200, undefined, "Access revoked successfully");
+  } catch (err) {
+    console.error("[deleteDocumentPermission] error:", err);
+    if (err.code === "P2025") {
+      return failure(res, 404, "Permission not found");
+    }
+    return failure(res, 500, "Internal server error");
+  }
+};
+
+export const getDocumentShareSettings = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    if (!documentId) return failure(res, 400, "documentId is required");
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        owner: true,
+        permissions: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!document) return failure(res, 404, "Document not found");
+
+    const ownerData = {
+      id: document.owner.id,
+      email: document.owner.email,
+      username: document.owner.username,
+      firstname: document.owner.firstname,
+      lastname: document.owner.lastname,
+      avatar: document.owner.avatar,
+      displayName: [document.owner.firstname, document.owner.lastname]
+        .filter(Boolean)
+        .join(" "),
+      initials:
+        `${document.owner.firstname?.[0] || ""}${document.owner.lastname?.[0] || ""}`.toUpperCase() ||
+        document.owner.username?.slice(0, 2).toUpperCase(),
+    };
+
+    const permissionsList = document.permissions
+      .filter((p) => p.userId !== document.ownerId)
+      .map((p) => ({
+        id: p.id,
+        role: p.role,
+        grantedAt: p.grantedAt,
+        user: {
+          id: p.user.id,
+          email: p.user.email,
+          username: p.user.username,
+          firstname: p.user.firstname,
+          lastname: p.user.lastname,
+          avatar: p.user.avatar,
+          displayName: [p.user.firstname, p.user.lastname]
+            .filter(Boolean)
+            .join(" "),
+          initials:
+            `${p.user.firstname?.[0] || ""}${p.user.lastname?.[0] || ""}`.toUpperCase() ||
+            p.user.username?.slice(0, 2).toUpperCase(),
+        },
+      }));
+
+    return success(res, 200, {
+      document: {
+        id: document.id,
+        title: document.title,
+        type: "document",
+        role: "owner",
+        owner: ownerData,
+        collaborators: permissionsList.map((p) => p.user),
+        collaboratorCount: permissionsList.length,
+        isPublic: document.isPublic,
+        publicRole: document.publicRole,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+        openedAt: document.openedAt || document.updatedAt,
+        preview: "document",
+      },
+      permissions: permissionsList,
+      isPublic: document.isPublic,
+      publicRole: document.publicRole,
+      shareUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/documents/${documentId}`,
+    });
+  } catch (err) {
+    console.error("[getDocumentShareSettings] error:", err);
+    return failure(res, 500, "Internal server error");
+  }
+};
+
+export const updateDocumentShareSettings = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { isPublic, publicRole, inviteEmail, role, removePermissionId } =
+      req.body;
+
+    if (!documentId) return failure(res, 400, "documentId is required");
+
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        owner: true,
+        permissions: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!document) return failure(res, 404, "Document not found");
+
+    const updateData = {};
+    if (isPublic !== undefined) updateData.isPublic = isPublic;
+    if (publicRole !== undefined) updateData.publicRole = publicRole;
+
+    if (inviteEmail && role) {
+      const targetUser = await prisma.user.findUnique({
+        where: { email: inviteEmail },
+      });
+      if (!targetUser) return failure(res, 404, "User not found");
+
+      if (targetUser.id !== document.ownerId) {
+        await prisma.permission.upsert({
+          where: {
+            userId_documentId: {
+              userId: targetUser.id,
+              documentId,
+            },
+          },
+          update: { role },
+          create: {
+            role,
+            userId: targetUser.id,
+            documentId,
+          },
+        });
+      }
+    }
+
+    if (removePermissionId) {
+      await prisma.permission.delete({
+        where: { id: removePermissionId },
+      });
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.document.update({
+        where: { id: documentId },
+        data: updateData,
+      });
+    }
+
+    const updatedDoc = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        owner: true,
+        permissions: {
+          include: { user: true },
+        },
+      },
+    });
+
+    const ownerData = {
+      id: updatedDoc.owner.id,
+      email: updatedDoc.owner.email,
+      username: updatedDoc.owner.username,
+      firstname: updatedDoc.owner.firstname,
+      lastname: updatedDoc.owner.lastname,
+      avatar: updatedDoc.owner.avatar,
+      displayName: [updatedDoc.owner.firstname, updatedDoc.owner.lastname]
+        .filter(Boolean)
+        .join(" "),
+      initials:
+        `${updatedDoc.owner.firstname?.[0] || ""}${updatedDoc.owner.lastname?.[0] || ""}`.toUpperCase() ||
+        updatedDoc.owner.username?.slice(0, 2).toUpperCase(),
+    };
+
+    const permissionsList = updatedDoc.permissions
+      .filter((p) => p.userId !== updatedDoc.ownerId)
+      .map((p) => ({
+        id: p.id,
+        role: p.role,
+        grantedAt: p.grantedAt,
+        user: {
+          id: p.user.id,
+          email: p.user.email,
+          username: p.user.username,
+          firstname: p.user.firstname,
+          lastname: p.user.lastname,
+          avatar: p.user.avatar,
+          displayName: [p.user.firstname, p.user.lastname]
+            .filter(Boolean)
+            .join(" "),
+          initials:
+            `${p.user.firstname?.[0] || ""}${p.user.lastname?.[0] || ""}`.toUpperCase() ||
+            p.user.username?.slice(0, 2).toUpperCase(),
+        },
+      }));
+
+    return success(res, 200, {
+      document: {
+        id: updatedDoc.id,
+        title: updatedDoc.title,
+        type: "document",
+        role: "owner",
+        owner: ownerData,
+        collaborators: permissionsList.map((p) => p.user),
+        collaboratorCount: permissionsList.length,
+        isPublic: updatedDoc.isPublic,
+        publicRole: updatedDoc.publicRole,
+        createdAt: updatedDoc.createdAt,
+        updatedAt: updatedDoc.updatedAt,
+        openedAt: updatedDoc.openedAt || updatedDoc.updatedAt,
+        preview: "document",
+      },
+      permissions: permissionsList,
+      isPublic: updatedDoc.isPublic,
+      publicRole: updatedDoc.publicRole,
+      shareUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/documents/${documentId}`,
+    });
+  } catch (err) {
+    console.error("[updateDocumentShareSettings] error:", err);
+    return failure(res, 500, "Internal server error");
+  }
+};
+
 export const listDocumentComments = async (req, res) => {
   try {
     const authUser = requireUser(req, res);
     if (!authUser) return;
 
-    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    const { document, role } = await findAccessibleDocument(
+      req.params.documentId,
+      authUser.userId,
+    );
     if (!document) {
       return failure(res, 404, "Not found");
     }
@@ -598,7 +1046,10 @@ export const createDocumentComment = async (req, res) => {
       return failure(res, 400, "Invalid input");
     }
 
-    const { document, role } = await findAccessibleDocument(req.params.documentId, authUser.userId);
+    const { document, role } = await findAccessibleDocument(
+      req.params.documentId,
+      authUser.userId,
+    );
     if (!document) {
       return failure(res, 404, "Not found");
     }
@@ -654,7 +1105,9 @@ export const deleteDocumentComment = async (req, res) => {
       return failure(res, 403, "No permission");
     }
 
-    const canDelete = comment.userId === authUser.userId || comment.document.ownerId === authUser.userId;
+    const canDelete =
+      comment.userId === authUser.userId ||
+      comment.document.ownerId === authUser.userId;
     if (!canDelete) {
       return failure(res, 403, "Permission denied");
     }

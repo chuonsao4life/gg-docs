@@ -1,170 +1,127 @@
 import "dotenv/config";
-import bcrypt from "bcrypt";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
+import bcrypt from "bcrypt";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-function snapshot(content) {
-  return Buffer.from(content, "utf8");
-}
-
-async function createDocumentWithPermissions({
-  title,
-  owner,
-  content,
-  folderId = null,
-  isStarred = false,
-  collaborators = [],
-}) {
-  const document = await prisma.document.create({
-    data: {
-      title,
-      ownerId: owner.id,
-      folderId,
-      isStarred,
-      snapshot: snapshot(content),
-      snapshotVersion: 1,
-      permissions: {
-        create: [
-          {
-            userId: owner.id,
-            role: "owner",
-          },
-          ...collaborators.map((collaborator) => ({
-            userId: collaborator.user.id,
-            role: collaborator.role,
-          })),
-        ],
-      },
-    },
-  });
-
-  console.log(`Created document "${document.title}" for ${owner.username}`);
-  return document;
-}
-
 async function main() {
-  console.log("Starting database seed...");
+  console.log("🌱 Seeding database...");
 
-  console.log("Cleaning existing records...");
+  // Clean (order matters due to FKs)
   await prisma.comment.deleteMany();
   await prisma.snapshot.deleteMany();
   await prisma.permission.deleteMany();
-  await prisma.session.deleteMany();
   await prisma.document.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log("Creating mock users...");
   const hashedPassword = await bcrypt.hash("password123", 10);
-  const [alice, bob, charlie] = await Promise.all([
-    prisma.user.create({
-      data: {
-        email: "alice@example.com",
-        username: "alice",
-        firstname: "Alice",
-        lastname: "Anderson",
-        hashedPassword,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: "bob@example.com",
-        username: "bob",
-        firstname: "Bob",
-        lastname: "Brown",
-        hashedPassword,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        email: "charlie@example.com",
-        username: "charlie",
-        firstname: "Charlie",
-        lastname: "Clark",
-        hashedPassword,
-      },
-    }),
-  ]);
 
-  console.log(`Created users: ${alice.username}, ${bob.username}, ${charlie.username}`);
+  // --- 10 Users ---
+  const usersToCreate = Array.from({ length: 10 }).map((_, i) => ({
+    email: `user${i + 1}@example.com`,
+    username: `user${i + 1}`,
+    firstname: `User`,
+    lastname: `${i + 1}`,
+    hashedPassword,
+  }));
 
-  console.log("Creating documents and permissions...");
-  const folderPlanning = "11111111-1111-4111-8111-111111111111";
-  const folderReports = "22222222-2222-4222-8222-222222222222";
+  const createdUsers = [];
+  for (const u of usersToCreate) {
+    const user = await prisma.user.create({ data: u });
+    createdUsers.push(user);
+  }
 
-  const roadmap = await createDocumentWithPermissions({
-    title: "Project Roadmap 2026",
-    owner: alice,
-    folderId: folderPlanning,
-    isStarred: true,
-    content: "Project Roadmap 2026\nQ1: discovery\nQ2: implementation\nQ3: launch",
-    collaborators: [
-      { user: bob, role: "editor" },
-      { user: charlie, role: "viewer" },
+  console.log(`✅ Created 10 users: user1 to user10 (password: password123)`);
+
+  // --- 3 Documents ---
+  // Doc 1: Owner=user1, Editor=user2, Commenter=user3
+  // Doc 2: Owner=user4, Editor=user5, Commenter=user6
+  // Doc 3: Owner=user7, Editor=user8, Commenter=user9
+  
+  const doc1 = await prisma.document.create({
+    data: {
+      title: "Project Roadmap 2026",
+      ownerId: createdUsers[0].id, // user1
+      isPublic: false,
+    },
+  });
+
+  const doc2 = await prisma.document.create({
+    data: {
+      title: "Team Meeting Notes",
+      ownerId: createdUsers[3].id, // user4
+      isPublic: false,
+    },
+  });
+
+  const doc3 = await prisma.document.create({
+    data: {
+      title: "Product Launch Plan",
+      ownerId: createdUsers[6].id, // user7
+      isPublic: true,
+      publicRole: "viewer",
+    },
+  });
+
+  console.log(`✅ Created 3 documents: "${doc1.title}", "${doc2.title}", "${doc3.title}"`);
+
+  // --- Permissions (1 editor, 1 commenter per document) ---
+  await prisma.permission.createMany({
+    data: [
+      // Doc 1
+      { userId: createdUsers[1].id, documentId: doc1.id, role: "editor" },      // user2
+      { userId: createdUsers[2].id, documentId: doc1.id, role: "commenter" },   // user3
+      
+      // Doc 2
+      { userId: createdUsers[4].id, documentId: doc2.id, role: "editor" },      // user5
+      { userId: createdUsers[5].id, documentId: doc2.id, role: "commenter" },   // user6
+      
+      // Doc 3
+      { userId: createdUsers[7].id, documentId: doc3.id, role: "editor" },      // user8
+      { userId: createdUsers[8].id, documentId: doc3.id, role: "commenter" },   // user9
     ],
   });
 
-  const meetingNotes = await createDocumentWithPermissions({
-    title: "Team Meeting Notes",
-    owner: bob,
-    content: "Weekly sync notes\n- Review blockers\n- Confirm owners\n- Update timeline",
-    collaborators: [
-      { user: alice, role: "viewer" },
-    ],
-  });
+  console.log("✅ Granted permissions (1 editor, 1 commenter for each document)");
 
-  const report = await createDocumentWithPermissions({
-    title: "Release Report",
-    owner: charlie,
-    folderId: folderReports,
-    isStarred: true,
-    content: "Release Report\nStatus: green\nRisks: low\nNext steps: monitor feedback",
-    collaborators: [
-      { user: alice, role: "editor" },
-      { user: bob, role: "viewer" },
-    ],
-  });
-
-  await createDocumentWithPermissions({
-    title: "Private Draft",
-    owner: alice,
-    content: "Private draft content that only Alice can access.",
-  });
-
-  console.log("Creating optional snapshot history records...");
-  await prisma.snapshot.createMany({
+  // --- Comments on Document 1 ---
+  await prisma.comment.createMany({
     data: [
       {
-        documentId: roadmap.id,
-        createdBy: alice.id,
-        version: 1,
-        snapshotData: snapshot("Roadmap initial version"),
+        content: "Great outline! Can we expand the Q2 section?",
+        documentId: doc1.id,
+        userId: createdUsers[1].id, // user2 (editor)
+        fromPos: 10,
+        toPos: 45,
       },
       {
-        documentId: meetingNotes.id,
-        createdBy: bob.id,
-        version: 1,
-        snapshotData: snapshot("Meeting notes initial version"),
+        content: "Agreed — and let’s add owners per milestone.",
+        documentId: doc1.id,
+        userId: createdUsers[0].id, // user1 (owner)
+        fromPos: 50,
+        toPos: 90,
       },
       {
-        documentId: report.id,
-        createdBy: charlie.id,
-        version: 1,
-        snapshotData: snapshot("Release report initial version"),
-      },
+        content: "I can help with the design tasks.",
+        documentId: doc1.id,
+        userId: createdUsers[2].id, // user3 (commenter)
+        fromPos: 100,
+        toPos: 120,
+      }
     ],
   });
 
-  console.log("Seed complete.");
+  console.log("✅ Created 3 comments on Document 1");
+  console.log("🎉 Seeding complete! You can now test document and permission routes.");
 }
 
 main()
-  .catch((error) => {
-    console.error("Seed failed:", error);
+  .catch((e) => {
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {
