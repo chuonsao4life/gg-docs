@@ -4,7 +4,7 @@ import { Editor, EditorContent } from '@tiptap/react'
 import { useCallback, useEffect, useRef } from 'react'
 import type { MouseEvent } from 'react'
 import { FloatingCommentButton } from '@/components/comments/FloatingCommentButton'
-import type { DocumentComment } from '@/types/comment'
+import type { CommentMarkRange, DocumentComment } from '@/types/comment'
 import type { EditorSelectionRange } from '@/types/editor-selection'
 
 type TiptapEditorProps = {
@@ -16,7 +16,7 @@ type TiptapEditorProps = {
   onSelectionChange?: (range: EditorSelectionRange | null) => void
   onStartComment?: () => void
   onSelectComment?: (commentId: string) => void
-  onCommentMarksChange?: (commentIds: string[]) => void
+  onCommentMarksChange?: (commentRanges: CommentMarkRange[]) => void
 }
 
 export default function TiptapEditor({
@@ -66,18 +66,27 @@ export default function TiptapEditor({
       return
     }
 
-    const commentIds = new Set<string>()
+    const commentRanges = new Map<string, CommentMarkRange>()
 
-    editor.state.doc.descendants((node) => {
+    editor.state.doc.descendants((node, position) => {
+      if (!node.isText) return
+
       node.marks.forEach((mark) => {
         const commentId = mark.attrs.commentId
         if (mark.type.name === "comment" && typeof commentId === "string" && commentId !== "draft") {
-          commentIds.add(commentId)
+          const fromPos = position
+          const toPos = position + node.nodeSize
+          const current = commentRanges.get(commentId)
+          commentRanges.set(commentId, {
+            commentId,
+            fromPos: current ? Math.min(current.fromPos, fromPos) : fromPos,
+            toPos: current ? Math.max(current.toPos, toPos) : toPos,
+          })
         }
       })
     })
 
-    onCommentMarksChange?.([...commentIds])
+    onCommentMarksChange?.([...commentRanges.values()])
   }, [editor, onCommentMarksChange])
 
   useEffect(() => {
@@ -195,8 +204,10 @@ export default function TiptapEditor({
       : domCommentId || getCommentIdFromPoint(event)
     if (!commentId) return
 
-    event.preventDefault()
-    event.stopPropagation()
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
     onSelectComment?.(commentId)
   }, [getCommentIdFromPoint, onSelectComment])
 
