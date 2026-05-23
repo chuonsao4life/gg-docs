@@ -4,7 +4,7 @@ import React from "react"
 import { Editor } from "@tiptap/react"
 import * as Y from 'yjs'
 import TiptapEditor from "./TiptapEditor"
-import type { DocumentComment } from "@/types/comment"
+import type { CommentMarkRange, DocumentComment } from "@/types/comment"
 import type { EditorSelectionRange } from "@/types/editor-selection"
 
 interface DocumentEditorContainerProps {
@@ -18,7 +18,7 @@ interface DocumentEditorContainerProps {
     onSelectionChange?: (range: EditorSelectionRange | null) => void;
     onStartComment?: () => void;
     onSelectComment?: (commentId: string) => void;
-    onCommentMarksChange?: (commentIds: string[]) => void;
+    onCommentMarksChange?: (commentRanges: CommentMarkRange[]) => void;
 }
 
 export function DocumentEditorContainer({ 
