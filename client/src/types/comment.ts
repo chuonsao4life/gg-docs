@@ -1,7 +1,11 @@
 export type CommentUser = {
     id: string
     username: string
-    avatar?: string
+    avatar?: string | null
+    email?: string
+    firstname?: string
+    lastname?: string
+    displayName?: string
 }
 
 export type DocumentComment = {
@@ -14,6 +18,12 @@ export type DocumentComment = {
     createdAt: string
     updatedAt?: string
     user: CommentUser
+}
+
+export type CommentMarkRange = {
+    commentId: string
+    fromPos: number
+    toPos: number
 }
 
 export type Comment = DocumentComment

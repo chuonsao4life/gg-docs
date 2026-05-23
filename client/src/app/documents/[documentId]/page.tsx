@@ -24,7 +24,11 @@ import {
   getDocumentSnapshot,
   saveDocumentSnapshot,
 } from "@/services/document.service";
-import { getStoredAccessToken, getStoredUser } from "@/services/auth.service";
+import {
+  getCurrentUser,
+  getStoredAccessToken,
+  getStoredUser,
+} from "@/services/auth.service";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import { FontSize } from "@/components/editor/extensions/FontSize";
@@ -36,7 +40,6 @@ import Paragraph from "@tiptap/extension-paragraph";
 import Document from "@tiptap/extension-document";
 import Text from "@tiptap/extension-text";
 import { CommentMark } from "@/components/editor/extensions/CommentMark";
-import { Indent } from "lucide-react";
 
 type Props = {
   params: Promise<{
@@ -73,9 +76,11 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   const [userInfo, setUserInfo] = useState(getStoredUser());
   const [title, setTitle] = useState("Tài liệu chưa có tiêu đề");
   const [myPermission, setMyPermission] = useState<{
+    role?: string | null;
     canEdit?: boolean;
     canComment?: boolean;
   } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Tạo displayName từ available fields
@@ -126,7 +131,6 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
               userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
           },
         }),
-        Indent,
         TextStyle,
         FontFamily,
         FontSize.configure({ types: ["textStyle"] }),
@@ -213,6 +217,25 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   }, []);
 
   useEffect(() => {
+    if (userInfo?.id) return;
+
+    let active = true;
+    getCurrentUser()
+      .then((user) => {
+        if (active) {
+          setUserInfo(user);
+        }
+      })
+      .catch((error) => {
+        console.warn("Unable to refresh current user", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userInfo?.id]);
+
+  useEffect(() => {
     if (!yProvider) return;
     if (yProvider.synced) {
       console.log("Đã đồng bộ từ trước (synced: true)");
@@ -228,12 +251,12 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     getDashboardDocument(documentId)
       .then((response) => {
         if (active) {
           setTitle(response.document.title || "Untitled document");
           setMyPermission(response.myPermission || { canEdit: true });
+          setCurrentUserId(response.currentUser?.id ?? null);
           setLoading(false);
         }
       })
@@ -287,6 +310,9 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
       title={title}
       editor={editor}
       canEdit={myPermission?.canEdit ?? false}
+      canComment={myPermission?.canComment ?? false}
+      currentUserId={currentUserId}
+      currentRole={myPermission?.role ?? null}
     >
       <DocumentEditorContainer
         documentId={documentId}
