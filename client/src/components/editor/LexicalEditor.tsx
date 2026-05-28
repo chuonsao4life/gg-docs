@@ -28,6 +28,7 @@ import type { DocumentComment } from "@/types/comment";
 import type { EditorSelectionRange } from "@/types/editor-selection";
 import type { PageMargins } from "@/types/page-layout";
 import { FloatingCommentButton } from "@/components/comments/FloatingCommentButton";
+import { getStableColor, getHighlightColor } from "@/lib/colors";
 
 import * as Y from "yjs";
 import { LiveblocksYjsProvider } from "@liveblocks/yjs";
@@ -221,6 +222,16 @@ function LexicalCommentPlugin({
     const syncHighlights = () => {
       rootElement.querySelectorAll("[data-comment-id]").forEach((el) => {
         const commentId = el.getAttribute("data-comment-id");
+        
+        const comment = comments.find(c => c.id === commentId);
+        if (comment) {
+            const identifier = comment.user.id || comment.user.username;
+            const baseColor = getStableColor(identifier);
+            const bgColor = getHighlightColor(identifier);
+            (el as HTMLElement).style.setProperty("--comment-color", bgColor);
+            (el as HTMLElement).style.setProperty("--comment-base-color", baseColor);
+        }
+
         if (activeCommentId && commentId === activeCommentId) {
           el.setAttribute("data-active-comment", "true");
         } else {
@@ -233,7 +244,7 @@ function LexicalCommentPlugin({
     const observer = new MutationObserver(syncHighlights);
     observer.observe(rootElement, { subtree: true, childList: true, attributes: true });
     return () => observer.disconnect();
-  }, [editor, activeCommentId]);
+  }, [editor, activeCommentId, comments]);
 
   return null;
 }

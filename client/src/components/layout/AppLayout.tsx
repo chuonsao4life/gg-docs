@@ -209,35 +209,46 @@ export function AppLayout({
         })
         .map((comment) => comment.id);
 
-      if (removedIds.length === 0) return;
+      // [FEATURE]: Real-time Broadcast.
+      // Nếu có một người khác vừa tạo comment, Yjs sẽ đồng bộ Mark sang máy này.
+      // Máy này nhận được ID lạ (chưa có trong state comments) thì sẽ tự động fetch DB.
+      const knownIds = new Set(comments.map(c => c.id));
+      const hasUnknownIds = existingCommentIds.some(id => id !== "draft" && !knownIds.has(id));
+      if (hasUnknownIds) {
+        void loadComments();
+      }
 
-      const removedIdSet = new Set(removedIds);
-      removedIds.forEach((commentId) => {
-        deletingCommentIdsRef.current.add(commentId);
-        syncedCommentMarkIdsRef.current.delete(commentId);
-        recentlyCreatedCommentIdsRef.current.delete(commentId);
-      });
-      setComments((prev) =>
-        prev.filter((comment) => !removedIdSet.has(comment.id)),
-      );
-      setActiveCommentId((current) =>
-        current && removedIdSet.has(current) ? null : current,
-      );
-
-      void Promise.allSettled(
-        removedIds.map((commentId) =>
-          deleteDocumentComment(documentId, commentId),
-        ),
-      ).then((results) => {
-        removedIds.forEach((commentId) => {
-          deletingCommentIdsRef.current.delete(commentId);
-        });
-
-        if (results.some((result) => result.status === "rejected")) {
-          setCommentError("Unable to delete removed comments.");
-          void loadComments();
-        }
-      });
+      // [FIX]: Vô hiệu hoá tính năng tự động dọn rác (auto-delete orphaned comments).
+      // Việc tự động xoá sẽ gây ra race-condition khi Yjs chưa kịp tải xong text, 
+      // dẫn đến việc Editor báo cáo thiếu mark và Frontend tự động xoá nhầm comment của Owner.
+      // Bình luận mồ côi (khi text bị xoá) sẽ vẫn được giữ lại trong Comment Panel để user tự quyết định xoá bằng tay.
+      
+      // if (removedIds.length === 0) return;
+      // const removedIdSet = new Set(removedIds);
+      // removedIds.forEach((commentId) => {
+      //   deletingCommentIdsRef.current.add(commentId);
+      //   syncedCommentMarkIdsRef.current.delete(commentId);
+      //   recentlyCreatedCommentIdsRef.current.delete(commentId);
+      // });
+      // setComments((prev) =>
+      //   prev.filter((comment) => !removedIdSet.has(comment.id)),
+      // );
+      // setActiveCommentId((current) =>
+      //   current && removedIdSet.has(current) ? null : current,
+      // );
+      // void Promise.allSettled(
+      //   removedIds.map((commentId) =>
+      //     deleteDocumentComment(documentId, commentId),
+      //   ),
+      // ).then((results) => {
+      //   removedIds.forEach((commentId) => {
+      //     deletingCommentIdsRef.current.delete(commentId);
+      //   });
+      //   if (results.some((result) => result.status === "rejected")) {
+      //     setCommentError("Unable to delete removed comments.");
+      //     void loadComments();
+      //   }
+      // });
     },
     [comments, documentId, loadComments],
   );

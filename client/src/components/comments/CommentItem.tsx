@@ -3,8 +3,9 @@
 import { useEffect, useRef } from "react"
 import type { KeyboardEvent, MouseEvent } from "react"
 import { Trash2 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { DocumentComment } from "@/types/comment"
+import { getStableColor, getHighlightColor } from "@/lib/colors"
 
 export function CommentItem({
     comment,
@@ -47,6 +48,10 @@ export function CommentItem({
         if (confirmed) onDelete?.()
     }
 
+    const identifier = comment.user.id || comment.user.username;
+    const baseColor = getStableColor(identifier);
+    const bgColor = getHighlightColor(identifier);
+
     return (
         <div
             ref={itemRef}
@@ -54,13 +59,21 @@ export function CommentItem({
             tabIndex={0}
             onClick={onClick}
             onKeyDown={handleItemKeyDown}
+            style={{
+                borderLeftColor: isActive ? baseColor : "transparent",
+                backgroundColor: isActive ? bgColor : undefined,
+                boxShadow: isActive ? `0 0 0 1px ${bgColor}` : undefined
+            }}
             className={[
                 "flex w-full gap-3 border-b border-l-4 px-4 py-3 text-left transition",
-                isActive ? "border-l-primary border-b-primary/20 bg-primary/10 ring-1 ring-primary/20" : "border-l-transparent bg-background hover:bg-muted/60",
+                isActive ? "border-b-primary/20" : "bg-background hover:bg-muted/60",
             ].join(" ")}
         >
             <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback>{comment.user.username.slice(0, 2)}</AvatarFallback>
+                <AvatarImage src={comment.user.avatar} alt={comment.user.username} />
+                <AvatarFallback style={{ backgroundColor: baseColor, color: "#fff" }}>
+                    {comment.user.username.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
             </Avatar>
 
             <div className="min-w-0 flex-1">

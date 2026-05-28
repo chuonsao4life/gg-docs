@@ -144,13 +144,13 @@
 .comment-highlight {
   cursor: pointer;
   border-radius: 3px;
-  background: #fef3c7;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2);
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  background: var(--comment-color, #fef3c7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: opacity 120ms ease, box-shadow 120ms ease;
 }
 
 .comment-highlight:hover {
-  background: #fde68a;
+  opacity: 0.8;
 }
 
 .comment-highlight[data-comment-draft="true"] {
@@ -159,12 +159,12 @@
 }
 
 .comment-highlight[data-comment-draft="true"]:hover {
-  background: #bae6fd;
+  opacity: 0.8;
 }
 
 .comment-highlight[data-active-comment="true"] {
-  background: #dbeafe;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  outline: 2px solid var(--comment-base-color, #3b82f6);
+  outline-offset: 1px;
 }
 
 

@@ -19,6 +19,7 @@ import {
   saveDocumentSnapshot,
 } from "@/services/document.service";
 import { getStoredAccessToken, getStoredUser } from "@/services/auth.service";
+import { getStableColor } from "@/lib/colors";
 
 type Props = {
   params: Promise<{
@@ -28,24 +29,7 @@ type Props = {
 
 const TAB_SESSION_ID = Math.random().toString(36).substring(7);
 
-const CURSOR_COLORS = [
-  "#958DF1",
-  "#F98181",
-  "#FBCE41",
-  "#FFC0CB",
-  "#85C1E9",
-  "#7DCEA0",
-  "#b19cd9",
-  "#f39c12",
-];
-const getStableColor = (identifier: string) => {
-  let hash = 0;
-  for (let i = 0; i < identifier.length; i++) {
-    hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % CURSOR_COLORS.length;
-  return CURSOR_COLORS[index];
-};
+
 
 function DocumentPageContent({ documentId }: { documentId: string }) {
   const room = useRoom();
