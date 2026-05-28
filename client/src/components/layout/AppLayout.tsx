@@ -11,7 +11,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import EditorMenuBar from "@/components/editor/EditorMenuBar";
 import EditorDynamicToolbar from "@/components/editor/EditorDynamicToolbar";
 import { MarginControls } from "@/components/editor/MarginControls";
-import { PaginatedEditorShell } from "@/components/editor/PaginatedEditorShell";
+import { PaginatedEditorShell, VerticalPageRuler } from "@/components/editor/PaginatedEditorShell";
 import { PageRuler } from "@/components/editor/PageRuler";
 import type { EditorMenuKey } from "@/types/editor-menu";
 import type {
@@ -22,6 +22,7 @@ import type { EditorSelectionRange } from "@/types/editor-selection";
 import type { DocumentComment } from "@/types/comment";
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { EditorAdapter } from "@/types/editor-adapter";
 import {
   createDocumentComment,
   deleteDocumentComment,
@@ -43,7 +44,7 @@ export function AppLayout({
   children: ReactNode;
   documentId: string;
   title?: string;
-  editor: any;
+  editor: EditorAdapter | null;
   canEdit?: boolean;
 }) {
   const [activeMenu, setActiveMenu] = useState<EditorMenuKey>("format");
@@ -119,26 +120,14 @@ export function AppLayout({
   const removeCommentMark = useCallback(
     (range: EditorSelectionRange | null) => {
       if (!editor || !hasValidRange(range)) return;
-
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from: range.from, to: range.to })
-        .unsetMark("comment")
-        .run();
+      editor.removeCommentMark(range);
     },
     [editor],
   );
 
   const applyDraftCommentMark = (range: EditorSelectionRange | null) => {
     if (!editor || !hasValidRange(range)) return;
-
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: range.from, to: range.to })
-      .setMark("comment", { commentId: "draft", isDraft: true })
-      .run();
+    editor.applyDraftCommentMark(range);
   };
 
   const clearDraftComment = useCallback(() => {
@@ -150,33 +139,7 @@ export function AppLayout({
   const removeCommentMarkById = useCallback(
     (commentId: string) => {
       if (!editor) return;
-
-      const commentMark = editor.schema.marks.comment;
-      if (!commentMark) return;
-
-      let transaction = editor.state.tr;
-
-      editor.state.doc.descendants((node: any, position: number) => {
-        if (!node.isText) return;
-
-        const targetCommentMarks = node.marks.filter(
-          (mark: any) =>
-            mark.type === commentMark && mark.attrs.commentId === commentId,
-        );
-        if (targetCommentMarks.length === 0) return;
-
-        targetCommentMarks.forEach((mark: any) => {
-          transaction = transaction.removeMark(
-            position,
-            position + node.nodeSize,
-            mark,
-          );
-        });
-      });
-
-      if (transaction.docChanged) {
-        editor.view.dispatch(transaction);
-      }
+      editor.removeCommentMarkById(commentId);
     },
     [editor],
   );
@@ -209,51 +172,16 @@ export function AppLayout({
   useEffect(() => {
     if (!editor || comments.length === 0) return;
 
-    const commentMark = editor.schema.marks.comment;
-    if (!commentMark) return;
-
-    const existingCommentIds = new Set<string>();
-    editor.state.doc.descendants((node: any) => {
-      if (!node.isText) return;
-
-      node.marks.forEach((mark: any) => {
-        const commentId = mark.attrs.commentId;
-        if (
-          mark.type === commentMark &&
-          typeof commentId === "string" &&
-          commentId !== "draft"
-        ) {
-          existingCommentIds.add(commentId);
-        }
-      });
-    });
-
-    let transaction = editor.state.tr;
-
     comments.forEach((comment) => {
-      if (existingCommentIds.has(comment.id)) return;
       if (
-        typeof comment.fromPos !== "number" ||
-        typeof comment.toPos !== "number" ||
-        comment.fromPos >= comment.toPos ||
-        comment.fromPos < 0 ||
-        comment.toPos > editor.state.doc.content.size
+        typeof comment.fromPos === "number" &&
+        typeof comment.toPos === "number" &&
+        comment.fromPos < comment.toPos
       ) {
-        return;
+        editor.addCommentMark(comment.fromPos, comment.toPos, comment.id);
+        syncedCommentMarkIdsRef.current.add(comment.id);
       }
-
-      transaction = transaction.addMark(
-        comment.fromPos,
-        comment.toPos,
-        commentMark.create({ commentId: comment.id, isDraft: false }),
-      );
-      existingCommentIds.add(comment.id);
-      syncedCommentMarkIdsRef.current.add(comment.id);
     });
-
-    if (transaction.docChanged) {
-      editor.view.dispatch(transaction);
-    }
   }, [editor, comments]);
 
   const handleCommentMarksChange = useCallback(
@@ -360,13 +288,8 @@ export function AppLayout({
         newComment.fromPos < newComment.toPos
       ) {
         recentlyCreatedCommentIdsRef.current.add(newComment.id);
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: newComment.fromPos, to: newComment.toPos })
-          .unsetMark("comment")
-          .setMark("comment", { commentId: newComment.id, isDraft: false })
-          .run();
+        editor.removeCommentMark(commentDraftRange);
+        editor.addCommentMark(newComment.fromPos, newComment.toPos, newComment.id);
         syncedCommentMarkIdsRef.current.add(newComment.id);
         window.setTimeout(() => {
           recentlyCreatedCommentIdsRef.current.delete(newComment.id);
@@ -399,246 +322,70 @@ export function AppLayout({
     setSelectedRange(null);
   };
 
+  // Subscribe to editor adapter changes to re-render toolbar state
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    if (!editor) return;
+    return editor.subscribe(() => {
+      forceUpdate({});
+    });
+  }, [editor]);
+
   const toolbarActions: EditorToolbarActions = {
     onSave: () => console.log("save"),
-    onUndo: canEdit ? () => editor?.chain().focus().undo().run() : undefined,
-    onRedo: canEdit ? () => editor?.chain().focus().redo().run() : undefined,
-    onBold: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleBold().run();
-          console.log(
-            "[BOLD]",
-            result ? "Success" : "Failed",
-            editor?.isActive("bold"),
-          );
-        }
-      : undefined,
-    onItalic: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleItalic().run();
-          console.log(
-            "[ITALIC]",
-            result ? "Success" : "Failed",
-            editor?.isActive("italic"),
-          );
-        }
-      : undefined,
-    onUnderline: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleUnderline().run();
-          console.log(
-            "[UNDERLINE]",
-            result ? "Success" : "Failed",
-            editor?.isActive("underline"),
-          );
-        }
-      : undefined,
+    onUndo: canEdit ? () => editor?.undo() : undefined,
+    onRedo: canEdit ? () => editor?.redo() : undefined,
+    onBold: canEdit ? () => editor?.toggleBold() : undefined,
+    onItalic: canEdit ? () => editor?.toggleItalic() : undefined,
+    onUnderline: canEdit ? () => editor?.toggleUnderline() : undefined,
     onStyleChange: canEdit
       ? (style: string) => {
-          let result: boolean | undefined = false;
-          // Convert UI label to style value
-          const styleMap: { [key: string]: string } = {
+          const styleMap: { [key: string]: "paragraph" | "h1" | "h2" | "h3" } = {
             "Normal text": "paragraph",
             "Heading 1": "h1",
             "Heading 2": "h2",
             "Heading 3": "h3",
           };
-          const styleValue = styleMap[style] || style;
-
-          if (styleValue === "paragraph") {
-            result = editor?.chain().focus().clearNodes().setParagraph().run();
-          } else if (styleValue === "h1") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 1 })
-              .run();
-          } else if (styleValue === "h2") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 2 })
-              .run();
-          } else if (styleValue === "h3") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 3 })
-              .run();
-          }
-          console.log(
-            "[STYLE]",
-            style,
-            "->",
-            styleValue,
-            result ? "Success" : "Failed",
-          );
-        }
-      : undefined,
-    onFontChange: canEdit
-      ? (font: string) => {
-          const result = editor?.chain().focus().setFontFamily(font).run();
-          console.log("[FONT]", font, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onFontSizeChange: canEdit
-      ? (size: string) => {
-          const sizeValue = size.replace("px", "");
-          const result = editor
-            ?.chain()
-            .focus()
-            .setFontSize(`${sizeValue}px`)
-            .run();
-          console.log("[FONT_SIZE]", size, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onTextColor: canEdit
-      ? (color: string) => {
-          const result = editor?.chain().focus().setColor(color).run();
-          console.log("[TEXT_COLOR]", color, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onHighlightColor: canEdit
-      ? (color: string) => {
-          const result = editor
-            ?.chain()
-            .focus()
-            .toggleHighlight({ color })
-            .run();
-          console.log("[HIGHLIGHT]", color, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignLeft: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("left").run();
-          console.log("[ALIGN_LEFT]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignCenter: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("center").run();
-          console.log("[ALIGN_CENTER]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignRight: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("right").run();
-          console.log("[ALIGN_RIGHT]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onBulletList: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleBulletList().run();
-          console.log(
-            "[BULLET_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("bulletList"),
-          );
-        }
-      : undefined,
-    onNumberedList: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleOrderedList().run();
-          console.log(
-            "[ORDERED_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("orderedList"),
-          );
-        }
-      : undefined,
-    onChecklist: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleTaskList().run();
-          console.log(
-            "[TASK_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("taskList"),
-          );
-        }
-      : undefined,
-    onDecreaseIndent: canEdit
-      ? () => {
-          // Check if can lift
-          if (editor?.can().liftListItem("listItem")) {
-            const result = editor
-              ?.chain()
-              .focus()
-              .liftListItem("listItem")
-              .run();
-            console.log("[DECREASE_INDENT]", result ? "Success" : "Failed");
-          } else {
-            console.log("[DECREASE_INDENT] Cannot lift - not in a list item");
+          const val = styleMap[style] || style;
+          if (val === "paragraph" || val === "h1" || val === "h2" || val === "h3") {
+            editor?.setStyle(val);
           }
         }
       : undefined,
-    onIncreaseIndent: canEdit
-      ? () => {
-          if (editor?.can().sinkListItem("listItem")) {
-            const result = editor
-              ?.chain()
-              .focus()
-              .sinkListItem("listItem")
-              .run();
-            console.log("[INCREASE_INDENT]", result ? "Success" : "Failed");
-          } else {
-            console.log(
-              "[INCREASE_INDENT] Cannot sink - not in a list item or no next item",
-            );
-          }
-        }
-      : undefined,
+    onFontChange: canEdit ? (font: string) => editor?.setFontFamily(font) : undefined,
+    onFontSizeChange: canEdit ? (size: string) => editor?.setFontSize(size) : undefined,
+    onTextColor: canEdit ? (color: string) => editor?.setColor(color) : undefined,
+    onHighlightColor: canEdit ? (color: string) => editor?.setHighlight(color) : undefined,
+    onAlignLeft: canEdit ? () => editor?.setTextAlign("left") : undefined,
+    onAlignCenter: canEdit ? () => editor?.setTextAlign("center") : undefined,
+    onAlignRight: canEdit ? () => editor?.setTextAlign("right") : undefined,
+    onBulletList: canEdit ? () => editor?.toggleBulletList() : undefined,
+    onNumberedList: canEdit ? () => editor?.toggleOrderedList() : undefined,
+    onChecklist: canEdit ? () => editor?.toggleTaskList() : undefined,
+    onDecreaseIndent: canEdit ? () => editor?.liftListItem() : undefined,
+    onIncreaseIndent: canEdit ? () => editor?.sinkListItem() : undefined,
     onInsertImage: () => console.log("insert image"),
     onInsertLink: () => console.log("insert link"),
     onAddComment: handleStartCommentFromSelection,
     onToggleMarginControls: () => setShowMarginControls((visible) => !visible),
   };
 
-  // Lấy kiểu văn bản hiện tại
-  const getCurrentStyle = () => {
-    if (editor?.isActive("heading", { level: 1 })) return "h1";
-    if (editor?.isActive("heading", { level: 2 })) return "h2";
-    if (editor?.isActive("heading", { level: 3 })) return "h3";
-    return "paragraph";
-  };
-
-  // Lấy font hiện tại
-  const getCurrentFont = () => {
-    return editor?.getAttributes("textStyle").fontFamily || "Arial";
-  };
-
-  // Lấy cỡ chữ hiện tại
-  const getCurrentFontSize = () => {
-    return (
-      editor?.getAttributes("textStyle").fontSize?.replace("px", "") || "11"
-    );
-  };
-
-  // Lấy căn lề hiện tại
-  const getCurrentAlignment = () => {
-    if (editor?.isActive({ textAlign: "center" })) return "center";
-    if (editor?.isActive({ textAlign: "right" })) return "right";
-    return "left";
-  };
-
   const toolbarState: EditorToolbarState = {
     zoom: "100%",
-    style: getCurrentStyle(),
-    font: getCurrentFont(),
-    fontSize: getCurrentFontSize(),
+    style: editor?.style || "paragraph",
+    font: editor?.fontFamily || "Arial",
+    fontSize: editor?.fontSize || "11",
     showRuler: false,
     showOutline: false,
     showMarginControls,
-    canUndo: editor?.can().undo() || false,
-    canRedo: editor?.can().redo() || false,
+    canUndo: editor?.canUndo || false,
+    canRedo: editor?.canRedo || false,
     activeMarks: {
-      bold: editor?.isActive("bold") || false,
-      italic: editor?.isActive("italic") || false,
-      underline: editor?.isActive("underline") || false,
+      bold: editor?.activeMarks.bold || false,
+      italic: editor?.activeMarks.italic || false,
+      underline: editor?.activeMarks.underline || false,
     },
-    activeAlignment: getCurrentAlignment(),
+    activeAlignment: editor?.alignment || "left",
   };
 
   const editorChildren = React.isValidElement<Record<string, unknown>>(children)
@@ -647,6 +394,7 @@ export function AppLayout({
         draftRange: commentDraftRange,
         comments,
         activeCommentId,
+        pageMargins,
         onSelectionChange: (range: EditorSelectionRange | null) => {
           if (!isComposerOpen) setSelectedRange(range);
         },
@@ -696,14 +444,21 @@ export function AppLayout({
                   onChange={setPageMargins}
                 />
               )}
-              <div className="flex-1 overflow-auto">
-                <PaginatedEditorShell
-                  margins={pageMargins}
-                  onMarginsChange={setPageMargins}
-                  pageCount={2}
-                >
-                  {editorChildren}
-                </PaginatedEditorShell>
+              <div className="flex flex-1 overflow-hidden">
+                <div className="h-full shrink-0 z-10">
+                  <VerticalPageRuler
+                    margins={pageMargins}
+                    onMarginsChange={setPageMargins}
+                  />
+                </div>
+                <div className="flex-1 overflow-auto">
+                  <PaginatedEditorShell
+                    margins={pageMargins}
+                    onMarginsChange={setPageMargins}
+                  >
+                    {editorChildren}
+                  </PaginatedEditorShell>
+                </div>
               </div>
             </div>
           </main>

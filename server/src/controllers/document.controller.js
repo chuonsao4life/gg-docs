@@ -173,10 +173,21 @@ function formatCollaborator(permission) {
 
 function getMyRole(document, userId) {
   if (document.ownerId === userId) return "owner";
-  return (
-    document.permissions?.find((permission) => permission.userId === userId)
-      ?.role || null
+
+  // Priority: Manual permission explicitly granted to the user
+  const manualPermission = document.permissions?.find(
+    (permission) => permission.userId === userId
   );
+  if (manualPermission) {
+    return manualPermission.role;
+  }
+
+  // Fallback: Link-based public permission
+  if (document.isPublic && document.publicRole) {
+    return document.publicRole;
+  }
+
+  return null;
 }
 
 function getPermissionFlags(role) {

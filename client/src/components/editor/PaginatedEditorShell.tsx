@@ -29,32 +29,50 @@ type VerticalPageRulerProps = {
     pageHeight: number
 }
 
-function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPageRulerProps) {
+export function VerticalPageRuler({ margins, onMarginsChange }: Omit<VerticalPageRulerProps, 'pageHeight'>) {
     const rulerRef = useRef<HTMLDivElement | null>(null)
     const [draggingHandle, setDraggingHandle] = useState<"top" | "bottom" | null>(null)
+    const [localMargins, setLocalMargins] = useState<PageMargins>(margins)
+    const localMarginsRef = useRef(margins)
+
+    useEffect(() => {
+        if (!draggingHandle) {
+            setLocalMargins(margins)
+            localMarginsRef.current = margins
+        }
+    }, [margins, draggingHandle])
 
     const getPageY = useCallback((clientY: number) => {
         const ruler = rulerRef.current
         if (!ruler) return 0
 
         const rect = ruler.getBoundingClientRect()
-        const y = Math.min(rect.height, Math.max(0, clientY - rect.top))
-        return (y / rect.height) * pageHeight
-    }, [pageHeight])
+        return Math.min(rect.height, Math.max(0, clientY - rect.top))
+    }, [])
 
     const updateVerticalMargin = useCallback((handle: "top" | "bottom", clientY: number) => {
         if (!onMarginsChange) return
 
         const pageY = getPageY(clientY)
+        const rulerHeight = rulerRef.current?.getBoundingClientRect().height || 1000
         const nextMargin = handle === "top"
             ? clampMargin(pageY)
-            : clampMargin(pageHeight - pageY)
+            : clampMargin(rulerHeight - pageY)
 
-        onMarginsChange({
-            ...margins,
+        const nextMargins = {
+            ...localMarginsRef.current,
             [handle]: nextMargin,
+        }
+
+        // Instant visual update for the ruler handle
+        setLocalMargins(nextMargins)
+        localMarginsRef.current = nextMargins
+
+        // Defer the heavy global layout update so it doesn't block the UI thread during drag
+        React.startTransition(() => {
+            onMarginsChange(nextMargins)
         })
-    }, [getPageY, margins, onMarginsChange, pageHeight])
+    }, [getPageY, onMarginsChange])
 
     useEffect(() => {
         if (!draggingHandle) return
@@ -81,21 +99,22 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
         <div
             ref={rulerRef}
             className="relative w-7 shrink-0 border-r bg-gray-50"
-            style={{ height: pageHeight }}
+            style={{ height: "100%" }}
             onClick={(event) => {
                 if (!onMarginsChange) return
                 const pageY = getPageY(event.clientY)
-                updateVerticalMargin(pageY <= pageHeight / 2 ? "top" : "bottom", event.clientY)
+                const rulerHeight = rulerRef.current?.getBoundingClientRect().height || 1000
+                updateVerticalMargin(pageY <= rulerHeight / 2 ? "top" : "bottom", event.clientY)
             }}
         >
             <div
                 className="absolute inset-x-0 top-0 bg-blue-100/70"
-                style={{ height: margins.top }}
+                style={{ height: localMargins.top }}
                 title="Top margin"
             />
             <div
                 className="absolute inset-x-0 bottom-0 bg-blue-100/70"
-                style={{ height: margins.bottom }}
+                style={{ height: localMargins.bottom }}
                 title="Bottom margin"
             />
             {Array.from({ length: VERTICAL_TICK_COUNT }, (_, tick) => (
@@ -112,7 +131,7 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
                 type="button"
                 aria-label="Top margin"
                 className="absolute left-1 h-2 w-5 -translate-y-1/2 cursor-ns-resize rounded-sm bg-blue-500 shadow outline-none ring-blue-300 focus:ring-2"
-                style={{ top: margins.top }}
+                style={{ top: localMargins.top }}
                 title="Top margin"
                 onPointerDown={(event) => {
                     event.preventDefault()
@@ -125,8 +144,8 @@ function VerticalPageRuler({ margins, onMarginsChange, pageHeight }: VerticalPag
             <button
                 type="button"
                 aria-label="Bottom margin"
-                className="absolute left-1 h-2 w-5 -translate-y-1/2 cursor-ns-resize rounded-sm bg-blue-500 shadow outline-none ring-blue-300 focus:ring-2"
-                style={{ top: pageHeight - margins.bottom }}
+                className="absolute left-1 h-2 w-5 translate-y-1/2 cursor-ns-resize rounded-sm bg-blue-500 shadow outline-none ring-blue-300 focus:ring-2"
+                style={{ bottom: localMargins.bottom }}
                 title="Bottom margin"
                 onPointerDown={(event) => {
                     event.preventDefault()
@@ -144,25 +163,39 @@ export function PaginatedEditorShell({
     children,
     margins = DEFAULT_PAGE_MARGINS,
     onMarginsChange,
-    pageCount = 2,
+    pageCount = 1,
     pageWidth = PAGE_WIDTH,
     pageHeight = PAGE_HEIGHT,
 }: PaginatedEditorShellProps) {
-    const pages = Array.from({ length: pageCount }, (_, index) => index)
+    const [dynamicPageCount, setDynamicPageCount] = useState(pageCount);
+    const overlayRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!overlayRef.current) return;
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const height = entry.contentRect.height;
+                const neededPages = Math.max(1, Math.ceil(height / (pageHeight + 32)));
+                setDynamicPageCount(neededPages + 1); // always give 1 extra blank page for comfortable typing
+            }
+        });
+        
+        observer.observe(overlayRef.current);
+        return () => observer.disconnect();
+    }, [pageHeight]);
+
+    const pages = Array.from({ length: Math.max(pageCount, dynamicPageCount) }, (_, index) => index);
 
     return (
-        <div className="min-w-max px-8 py-8">
+        <div className="min-w-max px-8 py-8 relative">
+            {/* Background Pages Layer */}
             <div className="mx-auto flex w-fit flex-col gap-8">
                 {pages.map((pageIndex) => (
                     <div key={pageIndex} className="flex items-start gap-3">
-                        <VerticalPageRuler
-                            margins={margins}
-                            onMarginsChange={onMarginsChange}
-                            pageHeight={pageHeight}
-                        />
+                        <div className="w-7 shrink-0" />
 
                         <section
-                            className="overflow-hidden bg-white shadow-sm ring-1 ring-gray-200"
+                            className="bg-white shadow-sm ring-1 ring-gray-200"
                             style={{
                                 width: pageWidth,
                                 height: pageHeight,
@@ -171,7 +204,7 @@ export function PaginatedEditorShell({
                             aria-label={`Page ${pageIndex + 1}`}
                         >
                             <div
-                                className="relative h-full w-full overflow-hidden"
+                                className="relative h-full w-full pointer-events-none"
                                 style={{
                                     paddingTop: `${margins.top}px`,
                                     paddingRight: `${margins.right}px`,
@@ -180,17 +213,37 @@ export function PaginatedEditorShell({
                                     boxSizing: "border-box",
                                 }}
                             >
-                                <div className="h-full w-full outline outline-1 outline-dashed outline-sky-200/70">
-                                    {pageIndex === 0 ? (
-                                        children
-                                    ) : (
-                                        <div className="text-sm text-gray-400">Page {pageIndex + 1}</div>
-                                    )}
+                                <div className="h-full w-full outline outline-1 outline-dashed outline-sky-200/70 flex items-center justify-center">
+                                    <div className="text-sm text-gray-200/50 select-none">Page {pageIndex + 1}</div>
                                 </div>
                             </div>
                         </section>
                     </div>
                 ))}
+            </div>
+
+            {/* Editor Overlay Layer */}
+            <div className="absolute inset-x-0 top-8 bottom-8 pointer-events-none overflow-visible">
+                <div className="mx-auto flex w-fit flex-col gap-8">
+                    <div className="flex items-start gap-3">
+                        <div className="w-7 shrink-0" /> {/* Spacer for ruler */}
+                        
+                        <div 
+                            ref={overlayRef}
+                            className="pointer-events-auto"
+                            style={{
+                                width: pageWidth,
+                                paddingTop: `${margins.top}px`,
+                                paddingRight: `${margins.right}px`,
+                                paddingBottom: `${margins.bottom}px`,
+                                paddingLeft: `${margins.left}px`,
+                                boxSizing: "border-box",
+                            }}
+                        >
+                            {children}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     )
