@@ -131,12 +131,19 @@
   nav,
   [data-comment-panel],
   [data-floating-comment-button],
-  .no-print {
+  .no-print,
+  a[href*="liveblocks.io"],
+  [class*="liveblocks-watermark"],
+  [class*="lb-root"] {
     display: none !important;
   }
 
   body {
     background: white !important;
+  }
+  
+  ::-webkit-scrollbar {
+    display: none !important;
   }
 }
 

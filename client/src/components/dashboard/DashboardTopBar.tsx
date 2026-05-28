@@ -1,10 +1,19 @@
 import Link from "next/link"
 import { CalendarDays, FileText, LogOut, Plus, Search, Settings } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function DashboardTopBar({
   search,
   onSearchChange,
   userInitials,
+  userAvatar,
   creating,
   onCreateBlank,
   onLogout,
@@ -12,6 +21,7 @@ export function DashboardTopBar({
   search: string
   onSearchChange: (value: string) => void
   userInitials: string
+  userAvatar?: string | null
   creating: boolean
   onCreateBlank: () => void
   onLogout: () => void
@@ -28,10 +38,6 @@ export function DashboardTopBar({
 
         <nav className="hidden items-center gap-1 text-sm text-muted-foreground lg:flex">
           <Link href="/" className="rounded-md px-3 py-2 transition hover:bg-secondary hover:text-foreground">Trang chủ</Link>
-          <Link href="/#calendar" className="inline-flex items-center gap-2 rounded-md px-3 py-2 transition hover:bg-secondary hover:text-foreground">
-            <CalendarDays className="h-4 w-4" />
-            Lịch
-          </Link>
         </nav>
 
         <div className="mx-auto flex max-w-3xl flex-1 items-center">
@@ -58,29 +64,34 @@ export function DashboardTopBar({
           <span className="hidden sm:inline">{creating ? "Đang tạo" : "Tạo mới"}</span>
         </button>
 
-        <Link
-          href="/settings"
-          className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground sm:flex"
-          title="Cài đặt người dùng"
-        >
-          <Settings className="h-5 w-5" />
-        </Link>
-
-        <button
-          type="button"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground"
-          title="Tài khoản"
-        >
-          {userInitials}
-        </button>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-destructive sm:flex"
-          title="Đăng xuất"
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex shrink-0 items-center justify-center rounded-full outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+              <Avatar className="h-10 w-10 border border-slate-200">
+                {userAvatar && <AvatarImage src={userAvatar} alt="User Avatar" />}
+                <AvatarFallback className="bg-primary text-base font-semibold text-primary-foreground">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="flex w-full cursor-pointer items-center">
+                <Settings className="mr-2 h-4 w-4" />
+                Cài đặt
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={onLogout}
+              className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Đăng xuất
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

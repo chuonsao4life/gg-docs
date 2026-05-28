@@ -176,7 +176,7 @@ export function PaginatedEditorShell({
             for (const entry of entries) {
                 const height = entry.contentRect.height;
                 const neededPages = Math.max(1, Math.ceil(height / (pageHeight + 32)));
-                setDynamicPageCount(neededPages + 1); // always give 1 extra blank page for comfortable typing
+                setDynamicPageCount(neededPages);
             }
         });
         
@@ -187,9 +187,39 @@ export function PaginatedEditorShell({
     const pages = Array.from({ length: Math.max(pageCount, dynamicPageCount) }, (_, index) => index);
 
     return (
-        <div className="min-w-max px-8 py-8 relative">
+        <div className="min-w-max px-8 py-8 relative print:px-0 print:py-0 print:min-w-0">
+            <style>{`
+                @media print {
+                    @page {
+                        size: ${pageWidth}px ${pageHeight}px;
+                        margin: ${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;
+                    }
+                    body {
+                        background: white !important;
+                        -webkit-print-color-adjust: exact;
+                    }
+                    /* Hide everything outside this editor context if needed */
+                    .print-hide {
+                        display: none !important;
+                    }
+                    /* Ensure the overlay is in the normal flow for pagination */
+                    .print-static {
+                        position: relative !important;
+                        top: auto !important;
+                        bottom: auto !important;
+                        left: auto !important;
+                        right: auto !important;
+                    }
+                    /* Remove fake margins during print because @page handles it */
+                    .print-no-padding {
+                        padding: 0 !important;
+                        width: auto !important;
+                    }
+                }
+            `}</style>
+            
             {/* Background Pages Layer */}
-            <div className="mx-auto flex w-fit flex-col gap-8">
+            <div className="mx-auto flex w-fit flex-col gap-8 print-hide">
                 {pages.map((pageIndex) => (
                     <div key={pageIndex} className="flex items-start gap-3">
                         <div className="w-7 shrink-0" />
@@ -213,8 +243,8 @@ export function PaginatedEditorShell({
                                     boxSizing: "border-box",
                                 }}
                             >
-                                <div className="h-full w-full outline outline-1 outline-dashed outline-sky-200/70 flex items-center justify-center">
-                                    <div className="text-sm text-gray-200/50 select-none">Page {pageIndex + 1}</div>
+                                <div className="h-full w-full outline outline-1 outline-dashed outline-transparent flex items-center justify-center">
+                                    <div className="hidden text-sm text-transparent select-none">Page {pageIndex + 1}</div>
                                 </div>
                             </div>
                         </section>
@@ -223,14 +253,14 @@ export function PaginatedEditorShell({
             </div>
 
             {/* Editor Overlay Layer */}
-            <div className="absolute inset-x-0 top-8 bottom-8 pointer-events-none overflow-visible">
-                <div className="mx-auto flex w-fit flex-col gap-8">
-                    <div className="flex items-start gap-3">
-                        <div className="w-7 shrink-0" /> {/* Spacer for ruler */}
+            <div className="absolute inset-x-0 top-8 bottom-8 pointer-events-none overflow-visible print-static">
+                <div className="mx-auto flex w-fit flex-col gap-8 print:block print:w-full">
+                    <div className="flex items-start gap-3 print:block">
+                        <div className="w-7 shrink-0 print-hide" /> {/* Spacer for ruler */}
                         
                         <div 
                             ref={overlayRef}
-                            className="pointer-events-auto"
+                            className="pointer-events-auto print-no-padding"
                             style={{
                                 width: pageWidth,
                                 paddingTop: `${margins.top}px`,

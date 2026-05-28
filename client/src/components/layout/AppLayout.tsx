@@ -416,7 +416,7 @@ export function AppLayout({
     : children;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col print:h-auto print:block">
       <Navbar
         key={`${documentId}-${title}`}
         documentId={documentId}
@@ -430,39 +430,43 @@ export function AppLayout({
           clearDraftComment();
         }}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Menu bar + dynamic toolbar */}
-        <EditorMenuBar
-          activeMenu={activeMenu}
-          onChangeMenu={handleChangeMenu}
-        />
-        <EditorDynamicToolbar
-          activeMenu={activeMenu}
-          actions={toolbarActions}
-          state={toolbarState}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible print:block">
+        <div className="print:hidden">
+          {/* Menu bar + dynamic toolbar */}
+          <EditorMenuBar
+            activeMenu={activeMenu}
+            onChangeMenu={handleChangeMenu}
+          />
+          <EditorDynamicToolbar
+            activeMenu={activeMenu}
+            actions={toolbarActions}
+            state={toolbarState}
+          />
+        </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-hidden bg-gray-100">
-            <div className="flex h-full flex-col">
-              <PageRuler
-                margins={pageMargins}
-                onMarginsChange={setPageMargins}
-              />
-              {showMarginControls && (
-                <MarginControls
+        <div className="flex flex-1 overflow-hidden print:overflow-visible print:block">
+          <main className="flex-1 overflow-hidden bg-gray-100 print:overflow-visible print:bg-transparent print:block">
+            <div className="flex h-full flex-col print:overflow-visible print:block">
+              <div className="print:hidden">
+                <PageRuler
                   margins={pageMargins}
-                  onChange={setPageMargins}
+                  onMarginsChange={setPageMargins}
                 />
-              )}
-              <div className="flex flex-1 overflow-hidden">
-                <div className="h-full shrink-0 z-10">
+                {showMarginControls && (
+                  <MarginControls
+                    margins={pageMargins}
+                    onChange={setPageMargins}
+                  />
+                )}
+              </div>
+              <div className="flex flex-1 overflow-hidden print:overflow-visible print:block">
+                <div className="h-full shrink-0 z-10 print:hidden">
                   <VerticalPageRuler
                     margins={pageMargins}
                     onMarginsChange={setPageMargins}
                   />
                 </div>
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 overflow-auto print:overflow-visible print:block">
                   <PaginatedEditorShell
                     margins={pageMargins}
                     onMarginsChange={setPageMargins}
