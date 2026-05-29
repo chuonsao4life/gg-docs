@@ -52,6 +52,10 @@ export function CommentItem({
     const baseColor = getStableColor(identifier);
     const bgColor = getHighlightColor(identifier);
 
+    const displayName = comment.user.firstname && comment.user.lastname
+        ? `${comment.user.firstname} ${comment.user.lastname}`
+        : comment.user.username;
+
     return (
         <div
             ref={itemRef}
@@ -70,15 +74,15 @@ export function CommentItem({
             ].join(" ")}
         >
             <Avatar className="h-8 w-8 shrink-0">
-                <AvatarImage src={comment.user.avatar} alt={comment.user.username} />
+                <AvatarImage src={comment.user.avatar} alt={displayName} />
                 <AvatarFallback style={{ backgroundColor: baseColor, color: "#fff" }}>
-                    {comment.user.username.slice(0, 2).toUpperCase()}
+                    {displayName.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
             </Avatar>
 
             <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                    <div className="truncate text-sm font-medium">{comment.user.username}</div>
+                    <div className="truncate text-sm font-medium">{displayName}</div>
                     <div className="flex shrink-0 items-center gap-2">
                         <div className="text-xs text-muted-foreground">{new Date(comment.createdAt).toLocaleString()}</div>
                         <button
