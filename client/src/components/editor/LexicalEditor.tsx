@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useMemo } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -69,6 +69,7 @@ interface LexicalEditorProps {
   onSelectComment?: (commentId: string) => void;
   onCommentMarksChange?: (commentIds: string[]) => void;
   canEdit?: boolean;
+  currentUserInfo?: { name: string; color: string };
 }
 
 function getDescendants(node: any): any[] {
@@ -360,6 +361,7 @@ export default function LexicalEditor({
   onSelectComment,
   onCommentMarksChange,
   canEdit,
+  currentUserInfo,
 }: LexicalEditorProps) {
   const editorWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -423,11 +425,23 @@ export default function LexicalEditor({
           <LexicalCollaboration>
             <CollaborationPlugin
               id={documentId}
-              providerFactory={(id, yjsDocMap) => {
-                yjsDocMap.set(id, doc);
-                return yProvider as any;
-              }}
+              providerFactory={useCallback(
+                (id, yjsDocMap) => {
+                  yjsDocMap.set(id, doc);
+                  return yProvider as any;
+                },
+                [doc, yProvider]
+              )}
               shouldBootstrap={false}
+              username={currentUserInfo?.name}
+              cursorColor={currentUserInfo?.color}
+              awarenessData={useMemo(
+                () =>
+                  currentUserInfo
+                    ? { name: currentUserInfo.name, color: currentUserInfo.color }
+                    : undefined,
+                [currentUserInfo?.name, currentUserInfo?.color]
+              )}
             />
           </LexicalCollaboration>
         )}
