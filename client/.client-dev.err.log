@@ -13,3 +13,51 @@
 [browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 9 is larger than the node's length (4).
 [browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
 Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] [Lexical Error] Error: $getTextNodeOffset: invalid offset 20 for size 13 at key 92
+    at eval (src\components\editor\adapters\LexicalAdapter.ts:239:24)
+    at LexicalAdapter.setFontFamily (src\components\editor\adapters\LexicalAdapter.ts:236:17)
+    at AppLayout.toolbarActions.onFontChange (src\components\layout\AppLayout.tsx:364:55)
+    at onChange (src\components\editor\toolbars\FormatToolbar.tsx:41:43)
+    at select (<anonymous>)
+    at FormatToolbar (src\components\editor\toolbars\FormatToolbar.tsx:38:13)
+    at EditorDynamicToolbar (src\components\editor\EditorDynamicToolbar.tsx:37:20)
+    at AppLayout (webpack-internal:///(app-pages-browser)/./src/components/layout/AppLayout.tsx:416:104)
+    at DocumentPageContent (src\app\documents\[documentId]\page.tsx:191:5)
+    at Object.children (src\app\documents\[documentId]\page.tsx:258:16)
+    at Page (src\app\documents\[documentId]\page.tsx:249:7)
+  237 |       const selection = $getSelection();
+  238 |       if ($isRangeSelection(selection)) {
+> 239 |         $patchStyleText(selection, { "font-family": font });
+      |                        ^
+  240 |       }
+  241 |     });
+  242 |   } (webpack-internal:///(app-pages-browser)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 20 is larger than the node's length (13).
+    at LexicalAdapter.setFontFamily (src\components\editor\adapters\LexicalAdapter.ts:236:17)
+    at AppLayout.toolbarActions.onFontChange (src\components\layout\AppLayout.tsx:364:55)
+    at onChange (src\components\editor\toolbars\FormatToolbar.tsx:41:43)
+  234 |
+  235 |   setFontFamily(font: string) {
+> 236 |     this.editor.update(() => {
+      |                 ^
+  237 |       const selection = $getSelection();
+  238 |       if ($isRangeSelection(selection)) {
+  239 |         $patchStyleText(selection, { "font-family": font }); (src\components\editor\adapters\LexicalAdapter.ts:236:17)
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: RangeError: Array buffer allocation failed
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: RangeError: Array buffer allocation failed
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438

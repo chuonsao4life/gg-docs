@@ -14,6 +14,13 @@ type Presence = {
   };
 };
 
+type RoomEvent = {
+  type: "DOCUMENT_COMMENT_CHANGED";
+  documentId: string;
+  action: "created" | "updated" | "deleted";
+  commentId?: string;
+};
+
 export const {
   suspense: {
     RoomProvider,
@@ -21,6 +28,8 @@ export const {
     useUpdateMyPresence,
     useSelf,
     useRoom,
+    useBroadcastEvent,
+    useEventListener,
   },
-} = createRoomContext<Presence, {}>(client);
+} = createRoomContext<Presence, {}, {}, RoomEvent>(client);
 export { client };

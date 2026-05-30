@@ -30,6 +30,7 @@ import {
   renameDashboardDocument,
   updateDocumentComment,
 } from "@/services/document.service";
+import { useBroadcastEvent, useEventListener } from "@/lib/liveblocks.config";
 
 function getCommentErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -73,6 +74,7 @@ export function AppLayout({
   const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set());
   const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set());
   const deletingCommentIdsRef = useRef<Set<string>>(new Set());
+  const broadcastCommentEvent = useBroadcastEvent();
 
   const loadComments = useCallback(async () => {
     const requestId = commentLoadRequestRef.current + 1;
@@ -112,6 +114,27 @@ export function AppLayout({
       window.clearTimeout(timeoutId);
     };
   }, [loadComments]);
+
+  useEventListener(({ event }) => {
+    if (
+      event.type !== "DOCUMENT_COMMENT_CHANGED" ||
+      event.documentId !== documentId
+    ) {
+      return;
+    }
+
+    if (event.action === "deleted" && event.commentId) {
+      removeCommentMarkById(event.commentId);
+      syncedCommentMarkIdsRef.current.delete(event.commentId);
+      recentlyCreatedCommentIdsRef.current.delete(event.commentId);
+      deletingCommentIdsRef.current.delete(event.commentId);
+      setActiveCommentId((current) =>
+        current === event.commentId ? null : current,
+      );
+    }
+
+    void loadComments();
+  });
 
   const handleChangeMenu = (menu: EditorMenuKey) => {
     console.log("Active menu:", menu);
@@ -166,6 +189,12 @@ export function AppLayout({
           current === commentId ? null : current,
         );
         clearDraftComment();
+        broadcastCommentEvent({
+          type: "DOCUMENT_COMMENT_CHANGED",
+          documentId,
+          action: "deleted",
+          commentId,
+        });
       } catch (error) {
         console.warn("Unable to delete comment", error);
         setCommentError(
@@ -173,7 +202,7 @@ export function AppLayout({
         );
       }
     },
-    [clearDraftComment, documentId, removeCommentMarkById],
+    [broadcastCommentEvent, clearDraftComment, documentId, removeCommentMarkById],
   );
 
   const editComment = useCallback(
@@ -188,6 +217,12 @@ export function AppLayout({
             comment.id === updatedComment.id ? updatedComment : comment,
           ),
         );
+        broadcastCommentEvent({
+          type: "DOCUMENT_COMMENT_CHANGED",
+          documentId,
+          action: "updated",
+          commentId,
+        });
       } catch (error) {
         console.warn("Unable to edit comment", error);
         setCommentError(
@@ -196,7 +231,7 @@ export function AppLayout({
         throw error;
       }
     },
-    [documentId],
+    [broadcastCommentEvent, documentId],
   );
 
   const canManageOwnComments = canComment || canEdit || currentRole === "owner";
@@ -288,10 +323,20 @@ export function AppLayout({
         if (results.some((result) => result.status === "rejected")) {
           setCommentError("Unable to delete removed comments.");
           void loadComments();
+          return;
         }
+
+        removedIds.forEach((commentId) => {
+          broadcastCommentEvent({
+            type: "DOCUMENT_COMMENT_CHANGED",
+            documentId,
+            action: "deleted",
+            commentId,
+          });
+        });
       });
     },
-    [comments, documentId, loadComments],
+    [broadcastCommentEvent, comments, documentId, loadComments],
   );
 
   const handleStartCommentFromSelection = () => {
@@ -332,6 +377,12 @@ export function AppLayout({
         documentId,
         commentPayload,
       );
+      broadcastCommentEvent({
+        type: "DOCUMENT_COMMENT_CHANGED",
+        documentId,
+        action: "created",
+        commentId: newComment.id,
+      });
 
       if (
         editor &&
