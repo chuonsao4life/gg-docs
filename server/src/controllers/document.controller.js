@@ -82,22 +82,6 @@ const createCommentSchema = z
     },
   );
 
-const updateCommentSchema = z
-  .object({
-    content: z.string().trim().min(1).max(2000),
-  })
-  .strict();
-
-const updateCommentPositionSchema = z
-  .object({
-    fromPos: z.number().int().nonnegative(),
-    toPos: z.number().int().nonnegative(),
-  })
-  .strict()
-  .refine((value) => value.fromPos < value.toPos, {
-    message: "Invalid comment range.",
-  });
-
 function success(res, status, data, message) {
   return res.status(status).json({
     success: true,
@@ -279,26 +263,6 @@ function formatDetailedDocument(document) {
     openedAt: document.openedAt,
     snapshot: snapshotToBase64(document.snapshot),
     snapshotVersion: document.snapshotVersion,
-  };
-}
-
-function formatDocumentUser(document, userId) {
-  const user =
-    document.ownerId === userId
-      ? document.owner
-      : document.permissions?.find((permission) => permission.userId === userId)
-          ?.user;
-
-  if (!user) return { id: userId };
-
-  return {
-    id: user.id,
-    email: user.email,
-    username: user.username,
-    firstname: user.firstname,
-    lastname: user.lastname,
-    avatar: user.avatar ?? null,
-    displayName: userName(user),
   };
 }
 
@@ -530,7 +494,6 @@ export const getDocument = async (req, res) => {
 
     return success(res, 200, {
       document: formatDetailedDocument(openedDocument),
-      currentUser: formatDocumentUser(openedDocument, authUser.userId),
       myPermission: getPermissionFlags(role),
       collaborators: openedDocument.permissions.map(formatCollaborator),
     });
@@ -1120,112 +1083,6 @@ export const createDocumentComment = async (req, res) => {
     return success(res, 201, formatComment(comment), "Comment created");
   } catch (err) {
     console.error("[createDocumentComment] error:", err);
-    return failure(res, 500, "Internal server error.");
-  }
-};
-
-export const updateDocumentCommentPosition = async (req, res) => {
-  try {
-    const authUser = requireUser(req, res);
-    if (!authUser) return;
-
-    const parsed = updateCommentPositionSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return failure(res, 400, "Invalid input");
-    }
-
-    const comment = await prisma.comment.findUnique({
-      where: { id: req.params.commentId },
-      include: {
-        document: {
-          include: {
-            owner: true,
-            permissions: {
-              include: { user: true },
-              orderBy: { grantedAt: "asc" },
-            },
-          },
-        },
-        user: true,
-      },
-    });
-
-    if (!comment || comment.documentId !== req.params.documentId) {
-      return failure(res, 404, "Not found");
-    }
-
-    const role = getMyRole(comment.document, authUser.userId);
-    if (!COMMENT_ROLES.has(role)) {
-      return failure(res, 403, "No comment permission");
-    }
-
-    const updatedComment = await prisma.comment.update({
-      where: { id: req.params.commentId },
-      data: {
-        fromPos: parsed.data.fromPos,
-        toPos: parsed.data.toPos,
-      },
-      include: { user: true },
-    });
-
-    return success(res, 200, formatComment(updatedComment), "Comment position updated");
-  } catch (err) {
-    console.error("[updateDocumentCommentPosition] error:", err);
-    return failure(res, 500, "Internal server error.");
-  }
-};
-
-export const updateDocumentComment = async (req, res) => {
-  try {
-    const authUser = requireUser(req, res);
-    if (!authUser) return;
-
-    const parsed = updateCommentSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return failure(res, 400, "Invalid input");
-    }
-
-    const comment = await prisma.comment.findUnique({
-      where: { id: req.params.commentId },
-      include: {
-        document: {
-          include: {
-            owner: true,
-            permissions: {
-              include: { user: true },
-              orderBy: { grantedAt: "asc" },
-            },
-          },
-        },
-        user: true,
-      },
-    });
-
-    if (!comment || comment.documentId !== req.params.documentId) {
-      return failure(res, 404, "Not found");
-    }
-
-    const role = getMyRole(comment.document, authUser.userId);
-    if (!role) {
-      return failure(res, 403, "No permission");
-    }
-
-    const canEdit =
-      (comment.userId === authUser.userId && COMMENT_ROLES.has(role)) ||
-      comment.document.ownerId === authUser.userId;
-    if (!canEdit) {
-      return failure(res, 403, "Permission denied");
-    }
-
-    const updatedComment = await prisma.comment.update({
-      where: { id: req.params.commentId },
-      data: { content: parsed.data.content },
-      include: { user: true },
-    });
-
-    return success(res, 200, formatComment(updatedComment), "Comment updated");
-  } catch (err) {
-    console.error("[updateDocumentComment] error:", err);
     return failure(res, 500, "Internal server error.");
   }
 };

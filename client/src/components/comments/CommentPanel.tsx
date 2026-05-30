@@ -20,10 +20,7 @@ type CommentPanelProps = {
     onSubmitComment: (content: string) => Promise<void> | void
     onCancelComposer: () => void
     onSelectComment: (commentId: string) => void
-    onEditComment: (commentId: string, content: string) => Promise<void> | void
     onDeleteComment: (commentId: string) => void
-    canEditComment?: (comment: DocumentComment) => boolean
-    canDeleteComment?: (comment: DocumentComment) => boolean
 }
 
 export function CommentPanel({
@@ -39,10 +36,7 @@ export function CommentPanel({
     onSubmitComment,
     onCancelComposer,
     onSelectComment,
-    onEditComment,
     onDeleteComment,
-    canEditComment,
-    canDeleteComment,
 }: CommentPanelProps) {
     return (
         <aside data-comment-panel className="flex h-full flex-col border-l bg-muted">
@@ -97,10 +91,7 @@ export function CommentPanel({
                             key={comment.id}
                             comment={comment}
                             isActive={comment.id === activeCommentId}
-                            canEdit={canEditComment?.(comment) ?? false}
-                            canDelete={canDeleteComment?.(comment) ?? false}
                             onClick={() => onSelectComment(comment.id)}
-                            onEdit={(content) => onEditComment(comment.id, content)}
                             onDelete={() => onDeleteComment(comment.id)}
                         />
                     ))

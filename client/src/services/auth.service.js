@@ -39,19 +39,8 @@ export const getStoredUser = () => {
   try {
     const user = localStorage.getItem('user');
     const parsed = user ? JSON.parse(user) : null;
-    if (parsed) {
-      console.log("getStoredUser():", parsed);
-      return parsed;
-    }
-
-    const session = readStoredSession();
-    if (session?.user) {
-      console.log("getStoredUser():", session.user);
-      return session.user;
-    }
-
     console.log("getStoredUser():", parsed);
-    return null;
+    return parsed;
   } catch {
     return null;
   }

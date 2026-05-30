@@ -79,7 +79,6 @@ export type DocumentDetailResponse = {
     folderId?: string | null
     isStarred?: boolean
   }
-  currentUser?: DashboardUser
   myPermission?: {
     role?: string | null
     canEdit?: boolean
@@ -254,32 +253,5 @@ export async function createDocumentComment(
 export async function deleteDocumentComment(documentId: string, commentId: string) {
   return request<{ id: string }>(`/documents/${documentId}/comments/${commentId}`, {
     method: "DELETE",
-  })
-}
-
-export async function updateDocumentComment(
-  documentId: string,
-  commentId: string,
-  payload: {
-    content: string
-  },
-) {
-  return request<DocumentComment>(`/documents/${documentId}/comments/${commentId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  })
-}
-
-export async function updateDocumentCommentPosition(
-  documentId: string,
-  commentId: string,
-  payload: {
-    fromPos: number
-    toPos: number
-  },
-) {
-  return request<DocumentComment>(`/documents/${documentId}/comments/${commentId}/position`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
   })
 }

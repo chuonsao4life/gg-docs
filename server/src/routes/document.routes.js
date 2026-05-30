@@ -13,8 +13,6 @@ import {
   createDocumentComment,
   deleteDocumentComment,
   listDocumentComments,
-  updateDocumentComment,
-  updateDocumentCommentPosition,
   getDocumentShareSettings,
   updateDocumentShareSettings,
 } from "../controllers/document.controller.js";
@@ -103,22 +101,10 @@ router.post(
   checkPermission(ROLES.COMMENTER),
   createDocumentComment,
 );
-router.patch(
-  "/:documentId/comments/:commentId/position",
-  verifyToken,
-  checkPermission(ROLES.COMMENTER),
-  updateDocumentCommentPosition,
-);
-router.patch(
-  "/:documentId/comments/:commentId",
-  verifyToken,
-  checkPermission(ROLES.VIEWER),
-  updateDocumentComment,
-);
 router.delete(
   "/:documentId/comments/:commentId",
   verifyToken,
-  checkPermission(ROLES.COMMENTER),
+  checkPermission(ROLES.EDITOR),
   deleteDocumentComment,
 );
 
