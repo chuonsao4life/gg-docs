@@ -255,3 +255,14 @@ export async function deleteDocumentComment(documentId: string, commentId: strin
     method: "DELETE",
   })
 }
+
+export async function updateDocumentComment(
+  documentId: string,
+  commentId: string,
+  payload: { content: string },
+) {
+  return request<DocumentComment>(`/documents/${documentId}/comments/${commentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}

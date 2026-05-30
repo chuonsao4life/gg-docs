@@ -39,6 +39,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   const [userInfo, setUserInfo] = useState(getStoredUser());
   const [title, setTitle] = useState("Tài liệu chưa có tiêu đề");
   const [myPermission, setMyPermission] = useState<{
+    role?: string | null;
     canEdit?: boolean;
     canComment?: boolean;
   } | null>(null);
@@ -193,6 +194,9 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
       title={title}
       editor={adapter}
       canEdit={myPermission?.canEdit ?? false}
+      canComment={myPermission?.canComment ?? false}
+      currentUserId={userInfo?.id ?? null}
+      currentRole={myPermission?.role ?? null}
     >
       <LexicalEditor
         documentId={documentId}

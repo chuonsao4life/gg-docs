@@ -1,0 +1,22 @@
+
+> client@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.4 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://172.31.33.221:3000
+- Environments: .env.local
+✓ Ready in 1031ms
+
+○ Compiling /dashboard ...
+ GET /dashboard 200 in 5.1s (next.js: 4.8s, application-code: 313ms)
+ GET /login?redirect=%2Fdashboard 200 in 1298ms (next.js: 1235ms, application-code: 63ms)
+ GET /login?redirect=%2Fdashboard 200 in 82ms (next.js: 49ms, application-code: 33ms)
+○ Compiling /documents/[documentId] ...
+ GET /documents/draft-local-1 200 in 6.0s (next.js: 5.6s, application-code: 439ms)
+ GET /dashboard 200 in 97ms (next.js: 33ms, application-code: 64ms)
+ GET /documents/f6c7441c-2270-4fc4-9da9-1e2e0da8c551 200 in 57ms (next.js: 19ms, application-code: 38ms)
+ GET /documents/f6c7441c-2270-4fc4-9da9-1e2e0da8c551 200 in 203ms (next.js: 143ms, application-code: 60ms)
+ GET /documents/f6c7441c-2270-4fc4-9da9-1e2e0da8c551 200 in 130ms (next.js: 78ms, application-code: 52ms)
+ GET /documents/f6c7441c-2270-4fc4-9da9-1e2e0da8c551 200 in 136ms (next.js: 78ms, application-code: 58ms)
+ GET /documents/draft-local-1 200 in 782ms (next.js: 31ms, application-code: 751ms)

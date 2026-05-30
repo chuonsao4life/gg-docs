@@ -1,0 +1,15 @@
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 30 is larger than the node's length (12).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 30 is larger than the node's length (12).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 30 is larger than the node's length (12).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 9 is larger than the node's length (4).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 9 is larger than the node's length (4).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+[browser] IndexSizeError: Failed to execute 'setBaseAndExtent' on 'Selection': The offset 9 is larger than the node's length (4).
+[browser] Ignored stale selection error during formatting extraction. (src\components\editor\adapters\LexicalAdapter.ts:163:17)
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
