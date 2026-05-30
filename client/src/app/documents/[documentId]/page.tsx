@@ -3,20 +3,14 @@
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { DocumentEditorContainer } from "@/components/editor/DocumentEditorContainer";
+import LexicalEditor from "@/components/editor/LexicalEditor";
+import type { EditorAdapter } from "@/types/editor-adapter";
 import {
   RoomProvider,
   useRoom,
   useUpdateMyPresence,
 } from "@/lib/liveblocks.config";
 import { ClientSideSuspense } from "@liveblocks/react";
-import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
-import TextStyle from "@tiptap/extension-text-style";
-import Placeholder from "@tiptap/extension-placeholder";
-import Underline from "@tiptap/extension-underline";
 import { LiveblocksYjsProvider } from "@liveblocks/yjs";
 import * as Y from "yjs";
 import {
@@ -24,22 +18,8 @@ import {
   getDocumentSnapshot,
   saveDocumentSnapshot,
 } from "@/services/document.service";
-import {
-  getCurrentUser,
-  getStoredAccessToken,
-  getStoredUser,
-} from "@/services/auth.service";
-import Color from "@tiptap/extension-color";
-import Highlight from "@tiptap/extension-highlight";
-import { FontSize } from "@/components/editor/extensions/FontSize";
-import FontFamily from "@tiptap/extension-font-family";
-import TextAlign from "@tiptap/extension-text-align";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import Paragraph from "@tiptap/extension-paragraph";
-import Document from "@tiptap/extension-document";
-import Text from "@tiptap/extension-text";
-import { CommentMark } from "@/components/editor/extensions/CommentMark";
+import { getStoredAccessToken, getStoredUser, onSessionChange } from "@/services/auth.service";
+import { getStableColor } from "@/lib/colors";
 
 type Props = {
   params: Promise<{
@@ -49,24 +29,7 @@ type Props = {
 
 const TAB_SESSION_ID = Math.random().toString(36).substring(7);
 
-const CURSOR_COLORS = [
-  "#958DF1",
-  "#F98181",
-  "#FBCE41",
-  "#FFC0CB",
-  "#85C1E9",
-  "#7DCEA0",
-  "#b19cd9",
-  "#f39c12",
-];
-const getStableColor = (identifier: string) => {
-  let hash = 0;
-  for (let i = 0; i < identifier.length; i++) {
-    hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % CURSOR_COLORS.length;
-  return CURSOR_COLORS[index];
-};
+
 
 function DocumentPageContent({ documentId }: { documentId: string }) {
   const room = useRoom();
@@ -76,11 +39,9 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   const [userInfo, setUserInfo] = useState(getStoredUser());
   const [title, setTitle] = useState("Tài liệu chưa có tiêu đề");
   const [myPermission, setMyPermission] = useState<{
-    role?: string | null;
     canEdit?: boolean;
     canComment?: boolean;
   } | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Tạo displayName từ available fields
@@ -97,92 +58,12 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   // Logic đồng bộ hóa Yjs Provider từ branch develop/dashboard
   const yProvider = useMemo(() => {
     if (!room || !doc) return null;
-    return new LiveblocksYjsProvider(room, doc);
+    const provider = new LiveblocksYjsProvider(room, doc);
+    (provider as any).doc = doc;
+    return provider;
   }, [room, doc]);
 
-  const editor = useEditor(
-    {
-      extensions: [
-        StarterKit.configure({
-          history: false,
-          bulletList: {
-            HTMLAttributes: {
-              class: "list-disc list-inside ml-0",
-            },
-          },
-          orderedList: {
-            HTMLAttributes: {
-              class: "list-decimal list-inside ml-0",
-            },
-          },
-          listItem: {},
-          document: false,
-          paragraph: false,
-        } as any),
-        Collaboration.configure({
-          document: doc,
-          field: "content",
-        }),
-        CollaborationCursor.configure({
-          provider: yProvider,
-          user: {
-            name: displayName,
-            color:
-              userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
-          },
-        }),
-        TextStyle,
-        FontFamily,
-        FontSize.configure({ types: ["textStyle"] }),
-        Document,
-        Paragraph.extend({
-          addAttributes() {
-            return {
-              ...this.parent?.(),
-              fontSize: {
-                default: "11px",
-                parseHTML: (element) => element.style.fontSize,
-                renderHTML: (attributes) => {
-                  if (!attributes.fontSize) return {};
-                  return { style: `font-size: ${attributes.fontSize}` };
-                },
-              },
-            };
-          },
-        }),
-        Color.configure({ types: [TextStyle.name] }),
-        Highlight.configure({
-          multicolor: true,
-        }),
-        TextAlign.configure({
-          types: [
-            "heading",
-            "paragraph",
-            "bulletList",
-            "orderedList",
-            "listItem",
-          ],
-        }),
-        TaskList.configure({
-          HTMLAttributes: {
-            class: "list-none",
-          },
-        }),
-        TaskItem.configure({
-          nested: true,
-          HTMLAttributes: {
-            class: "flex items-start gap-2",
-          },
-        }),
-        CommentMark,
-        Underline,
-      ].filter(Boolean) as any,
-      immediatelyRender: false,
-      shouldRerenderOnTransaction: true,
-      editable: myPermission?.canEdit ?? false,
-    },
-    [doc, room, yProvider, myPermission?.canEdit],
-  );
+  const [adapter, setAdapter] = useState<EditorAdapter | null>(null);
 
   // Update presence với userInfo (broadcast qua Liveblocks)
   useEffect(() => {
@@ -204,36 +85,21 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     }
   }, [displayName, userInfo, updateMyPresence]);
 
-  // Listen storage event để sync userInfo giữa các tabs (cùng trình duyệt)
+  // Listen storage event (cross-tab) AND onSessionChange (same-tab) để sync userInfo
   useEffect(() => {
-    const handleStorageChange = () => {
+    const syncUserInfo = () => {
       const storedUser = getStoredUser();
       setUserInfo(storedUser);
-      console.log("Sync userInfo từ tab khác:", storedUser);
+      console.log("Sync userInfo (storage/session event):", storedUser);
     };
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  useEffect(() => {
-    if (userInfo?.id) return;
-
-    let active = true;
-    getCurrentUser()
-      .then((user) => {
-        if (active) {
-          setUserInfo(user);
-        }
-      })
-      .catch((error) => {
-        console.warn("Unable to refresh current user", error);
-      });
-
+    window.addEventListener("storage", syncUserInfo);
+    const unsubscribe = onSessionChange(syncUserInfo);
     return () => {
-      active = false;
+      window.removeEventListener("storage", syncUserInfo);
+      unsubscribe();
     };
-  }, [userInfo?.id]);
+  }, []);
 
   useEffect(() => {
     if (!yProvider) return;
@@ -251,12 +117,12 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     getDashboardDocument(documentId)
       .then((response) => {
         if (active) {
           setTitle(response.document.title || "Untitled document");
           setMyPermission(response.myPermission || { canEdit: true });
-          setCurrentUserId(response.currentUser?.id ?? null);
           setLoading(false);
         }
       })
@@ -271,28 +137,45 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     };
   }, [documentId, router]);
 
-  console.log("📝 Editor state:", { editor: !!editor, userInfo });
+  console.log("📝 Editor state:", { editor: !!adapter, userInfo });
 
   useEffect(() => {
     // Chỉ update user info khi displayName thay đổi, không recreate editor
-    if (editor && displayName) {
+    if (adapter && displayName && yProvider) {
       console.log(
         "🎨 Update cursor info (không recreate editor):",
         displayName,
       );
 
-      if (editor.commands.updateUser) {
-        editor.commands.updateUser({
+      const color = userInfo?.color || getStableColor(displayName + TAB_SESSION_ID);
+
+      // Directly update Yjs awareness state so remote cursors show the new name
+      const awareness = yProvider.awareness;
+      const localState = awareness.getLocalState();
+      if (localState) {
+        awareness.setLocalState({
+          ...localState,
           name: displayName,
-          color:
-            userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
+          color,
         });
-        console.log("✅ updateUser thành công");
-      } else {
-        console.warn("⚠️ updateUser command not found");
       }
+
+      adapter.updateUser({ name: displayName, color });
     }
-  }, [displayName, editor, userInfo]);
+  }, [displayName, adapter, userInfo, yProvider]);
+
+  // Prevent Yjs awareness from timing out (default is 30s).
+  // This ensures the remote cursor stays visible as long as the user is in the room.
+  useEffect(() => {
+    if (!yProvider) return;
+    const interval = setInterval(() => {
+      const state = yProvider.awareness.getLocalState();
+      if (state) {
+        yProvider.awareness.setLocalState(state);
+      }
+    }, 15000); // ping every 15 seconds
+    return () => clearInterval(interval);
+  }, [yProvider]);
 
   if (loading) {
     return (
@@ -308,16 +191,16 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     <AppLayout
       documentId={documentId}
       title={title}
-      editor={editor}
+      editor={adapter}
       canEdit={myPermission?.canEdit ?? false}
-      canComment={myPermission?.canComment ?? false}
-      currentUserId={currentUserId}
-      currentRole={myPermission?.role ?? null}
     >
-      <DocumentEditorContainer
+      <LexicalEditor
         documentId={documentId}
-        editor={editor}
         doc={doc}
+        yProvider={yProvider}
+        onReady={setAdapter}
+        canEdit={myPermission?.canEdit ?? false}
+        currentUserInfo={displayName ? { name: displayName, color: userInfo?.color || getStableColor(displayName + TAB_SESSION_ID) } : undefined}
       />
     </AppLayout>
   );

@@ -1,8 +1,19 @@
-import { FileText, MoreVertical, Users } from "lucide-react"
+import { FileText, MoreVertical } from "lucide-react"
 import { DashboardDocument } from "@/services/document.service"
 import { formatDocumentDate } from "./dashboardUtils"
+import { DocumentActionMenu } from "./DocumentDashboardUI"
 
-export function DocumentCard({ document, onOpen }: { document: DashboardDocument; onOpen: () => void }) {
+export function DocumentCard({ 
+  document, 
+  onOpen,
+  onRename,
+  onDelete
+}: { 
+  document: DashboardDocument; 
+  onOpen: () => void;
+  onRename: (newTitle: string) => void;
+  onDelete: () => void;
+}) {
   return (
     <article className="group overflow-hidden rounded-md border border-slate-200 bg-white transition hover:border-primary hover:shadow-md">
       <button type="button" onClick={onOpen} className="block h-[292px] w-full overflow-hidden text-left">
@@ -13,16 +24,24 @@ export function DocumentCard({ document, onOpen }: { document: DashboardDocument
           <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-base font-semibold text-slate-700 hover:text-primary">
             {document.title}
           </button>
-          <button type="button" className="rounded-full p-1 text-slate-500 opacity-100 transition hover:bg-slate-100 sm:opacity-0 sm:group-hover:opacity-100" title="Tùy chọn">
-            <MoreVertical className="h-5 w-5" />
-          </button>
+          
+          <div onClick={e => e.stopPropagation()}>
+            <DocumentActionMenu 
+              document={document}
+              onRename={onRename}
+              onDelete={onDelete}
+              trigger={
+                <button type="button" className="rounded-full p-1 text-slate-500 opacity-100 transition hover:bg-slate-100 sm:opacity-0 sm:group-hover:opacity-100" title="Tùy chọn">
+                  <MoreVertical className="h-5 w-5" />
+                </button>
+              }
+            />
+          </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-2 text-sm text-slate-500">
           <FileText className="h-5 w-5 shrink-0 text-primary" />
-          <Users className="h-4 w-4 shrink-0" />
           <span className="min-w-0 truncate">{formatDocumentDate(document.openedAt || document.updatedAt)}</span>
-          {document.collaboratorCount > 0 && <span className="ml-auto shrink-0 text-xs">{document.collaboratorCount + 1} người</span>}
         </div>
       </div>
     </article>

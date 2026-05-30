@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutGrid, List, RefreshCw } from "lucide-react"
-import { ChatPanel } from "@/components/chat-panel"
 import { logoutUser } from "@/services/auth.service"
 import {
   createDashboardDocument,
@@ -18,6 +17,7 @@ import {
   FALLBACK_DOCUMENTS,
   ESSENTIAL_TEMPLATE_IDS,
   getInitials,
+  getUserAvatar,
   OwnerFilter,
   SortMode,
   ViewMode
@@ -39,11 +39,14 @@ export function DocumentDashboard() {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [userInitials, setUserInitials] = useState("T")
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [userAvatar, setUserAvatar] = useState<string | null>(null)
   const localDraftCounter = useRef(0)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setUserInitials(getInitials()), 0)
+    const timer = window.setTimeout(() => {
+      setUserInitials(getInitials())
+      setUserAvatar(getUserAvatar())
+    }, 0)
     return () => window.clearTimeout(timer)
   }, [])
 
@@ -61,8 +64,9 @@ export function DocumentDashboard() {
     return () => { isActive = false }
   }, [])
 
-  const loadDocuments = useCallback(async (isActive: () => boolean) => {
+  const loadDocuments = useCallback(async (isActive: () => boolean, isSilent = false) => {
     try {
+      if (!isSilent && isActive()) setLoading(true)
       const searching = Boolean(search.trim())
       const effectiveSortMode = searching ? "title" : sortMode
       const nextDocuments = await listDashboardDocuments({
@@ -73,7 +77,7 @@ export function DocumentDashboard() {
       })
       if (isActive()) setDocuments(nextDocuments.length > 0 ? nextDocuments : [])
     } catch (error) {
-      if (isActive()) {
+      if (isActive() && !isSilent) {
         setDocuments(FALLBACK_DOCUMENTS)
         setNotice(error instanceof Error ? error.message : "Không thể tải tài liệu, đang hiển thị dữ liệu mẫu.")
       }
@@ -85,18 +89,20 @@ export function DocumentDashboard() {
   useEffect(() => {
     let active = true
     const timer = window.setTimeout(() => {
-      setLoading(true)
-      setNotice("")
-      void loadDocuments(() => active)
+      if (active) setNotice("")
+      void loadDocuments(() => active, false)
     }, 220)
     return () => {
       active = false
       window.clearTimeout(timer)
     }
-  }, [loadDocuments, refreshKey])
+  }, [loadDocuments])
 
   useEffect(() => {
-    const refreshDocuments = () => setRefreshKey((key) => key + 1)
+    let active = true
+    const refreshDocuments = () => {
+      if (active) void loadDocuments(() => active, true)
+    }
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") refreshDocuments()
     }
@@ -105,10 +111,11 @@ export function DocumentDashboard() {
     document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
+      active = false
       window.removeEventListener("focus", refreshDocuments)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [])
+  }, [loadDocuments])
 
   const filteredFallbackDocuments = useMemo(() => {
     if (!notice || !search.trim()) return documents
@@ -142,6 +149,28 @@ export function DocumentDashboard() {
     }
   }
 
+  const handleRenameDocument = useCallback(async (docId: string, newTitle: string) => {
+    try {
+      setDocuments(docs => docs.map(d => d.id === docId ? { ...d, title: newTitle } : d));
+      const { renameDashboardDocument } = await import("@/services/document.service");
+      await renameDashboardDocument(docId, newTitle);
+    } catch (error) {
+      setNotice("Đổi tên thất bại. Vui lòng thử lại.");
+      void loadDocuments(() => true, true);
+    }
+  }, [loadDocuments]);
+
+  const handleDeleteDocument = useCallback(async (docId: string) => {
+    try {
+      setDocuments(docs => docs.filter(d => d.id !== docId));
+      const { deleteDashboardDocument } = await import("@/services/document.service");
+      await deleteDashboardDocument(docId);
+    } catch (error) {
+      setNotice("Xóa tài liệu thất bại. Vui lòng thử lại.");
+      void loadDocuments(() => true, true);
+    }
+  }, [loadDocuments]);
+
   const handleOpenDocument = (docId: string) => {
     router.push(`/documents/${docId}`)
   }
@@ -157,6 +186,7 @@ export function DocumentDashboard() {
         search={search}
         onSearchChange={setSearch}
         userInitials={userInitials}
+        userAvatar={userAvatar}
         creating={creatingTemplateId === "blank"}
         onCreateBlank={() => handleCreateDocument("blank")}
         onLogout={handleLogout}
@@ -247,19 +277,30 @@ export function DocumentDashboard() {
           ) : viewMode === "grid" ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
               {visibleDocuments.map((document) => (
-                <DocumentCard key={document.id} document={document} onOpen={() => handleOpenDocument(document.id)} />
+                <DocumentCard 
+                  key={document.id} 
+                  document={document} 
+                  onOpen={() => handleOpenDocument(document.id)} 
+                  onRename={(newTitle) => handleRenameDocument(document.id, newTitle)}
+                  onDelete={() => handleDeleteDocument(document.id)}
+                />
               ))}
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border border-slate-200">
               {visibleDocuments.map((document) => (
-                <DocumentListRow key={document.id} document={document} onOpen={() => handleOpenDocument(document.id)} />
+                <DocumentListRow 
+                  key={document.id} 
+                  document={document} 
+                  onOpen={() => handleOpenDocument(document.id)}
+                  onRename={(newTitle) => handleRenameDocument(document.id, newTitle)}
+                  onDelete={() => handleDeleteDocument(document.id)} 
+                />
               ))}
             </div>
           )}
         </section>
       </main>
-      <ChatPanel />
     </div>
   )
 }

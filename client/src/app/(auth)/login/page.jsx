@@ -66,7 +66,7 @@ function LoginContent() {
             value={form.email}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </label>
 
@@ -75,7 +75,7 @@ function LoginContent() {
             <span className="text-sm font-medium text-slate-700">Password</span>
             <Link
               href="/forgot-password"
-              className="text-xs text-slate-600 hover:text-slate-900 hover:underline"
+              className="text-xs text-slate-600 hover:text-primary hover:underline"
             >
               Forgot password?
             </Link>
@@ -86,14 +86,14 @@ function LoginContent() {
             value={form.password}
             onChange={handleChange}
             required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </label>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-slate-900 text-white py-2.5 font-medium hover:bg-slate-800 disabled:opacity-60 transition"
+          className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 font-medium hover:bg-primary/90 disabled:opacity-60 transition"
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
@@ -101,7 +101,7 @@ function LoginContent() {
 
       <p className="text-sm text-slate-600 mt-6 text-center">
         Don&apos;t have an account?{' '}
-        <Link href="/register" className="text-slate-900 font-medium hover:underline">
+        <Link href="/register" className="text-primary font-medium hover:underline">
           Create one
         </Link>
       </p>

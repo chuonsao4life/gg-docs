@@ -67,6 +67,22 @@ export function getInitials() {
   return "T"
 }
 
+export function getUserAvatar() {
+  if (typeof window === "undefined") return null
+
+  const rawUser = localStorage.getItem("user")
+  if (rawUser) {
+    try {
+      const user = JSON.parse(rawUser)
+      return user?.avatar || null
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
 export function formatDocumentDate(value: string) {
   if (value.startsWith("Đã mở") || value.includes("thg")) return value
 

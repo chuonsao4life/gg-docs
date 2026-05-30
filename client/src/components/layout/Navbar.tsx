@@ -3,8 +3,15 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Download, FileText, LogOut, MessageSquareText, Wifi, WifiOff } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Download, FileText, LogOut, MessageSquareText, Settings } from "lucide-react"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ShareDialog } from "@/components/editor/ShareDialog"
 import { getStoredUser, logoutUser, onSessionChange } from "@/services/auth.service"
 
@@ -13,6 +20,7 @@ type StoredUser = {
     lastname?: string
     username?: string
     email?: string
+    avatar?: string
 }
 
 function getDisplayName(user: StoredUser | null) {
@@ -149,27 +157,34 @@ export function Navbar({
                     <MessageSquareText className="h-4 w-4" />
                     Bình luận
                 </button>
-                <div
-                    className={`hidden h-9 items-center gap-2 rounded-md px-3 text-sm md:flex ${
-                        isOnline ? "text-emerald-700" : "text-amber-700"
-                    }`}
-                    title={isOnline ? "Online" : "Offline"}
-                >
-                    {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-                    {isOnline ? "Online" : "Offline"}
-                </div>
                 <ShareDialog documentId={documentId} />
-                <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="hidden h-9 items-center gap-2 rounded-md px-3 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-red-600 md:flex"
-                >
-                    <LogOut className="h-4 w-4" />
-                    Đăng xuất
-                </button>
-                <Avatar className="h-8 w-8" title={displayName}>
-                    <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
-                </Avatar>
+                
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                            <Avatar className="h-8 w-8 border border-slate-200" title={displayName}>
+                                {user?.avatar && <AvatarImage src={user.avatar} alt={displayName} />}
+                                <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
+                            </Avatar>
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem asChild>
+                            <Link href="/settings" className="flex w-full cursor-pointer items-center">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Cài đặt
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                            onClick={handleLogout}
+                            className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600"
+                        >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Đăng xuất
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </header>
     )

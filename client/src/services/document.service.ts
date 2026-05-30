@@ -195,6 +195,12 @@ export async function renameDashboardDocument(documentId: string, title: string)
   })
 }
 
+export async function deleteDashboardDocument(documentId: string) {
+  return request<{ success: boolean; message: string }>(`/documents/${documentId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function getDocumentSnapshot(documentId: string) {
   return request<DocumentSnapshot>(`/documents/${documentId}/snapshot`)
 }

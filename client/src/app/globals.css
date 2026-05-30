@@ -131,52 +131,33 @@
   nav,
   [data-comment-panel],
   [data-floating-comment-button],
-  .no-print {
+  .no-print,
+  a[href*="liveblocks.io"],
+  [class*="liveblocks-watermark"],
+  [class*="lb-root"] {
     display: none !important;
   }
 
   body {
     background: white !important;
   }
+  
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
 }
 
-/* --- TIPTAP COLLABORATION CURSOR CSS --- */
-.collaboration-cursor__caret {
-  position: relative;
-  margin-left: -1px;
-  margin-right: -1px;
-  border-left: 2px solid; 
-  border-right: 2px solid; 
-  word-break: normal;
-  pointer-events: none;
-  height: 1.2em;
-}
 
-.collaboration-cursor__label {
-  position: absolute;
-  top: -1.4em;
-  left: -2px;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 600;
-  line-height: normal;
-  user-select: none;
-  color: #fff;
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px 3px 3px 0;
-  white-space: nowrap;
-  z-index: 50; 
-}
 .comment-highlight {
   cursor: pointer;
   border-radius: 3px;
-  background: #fef3c7;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2);
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  background: var(--comment-color, #fef3c7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: opacity 120ms ease, box-shadow 120ms ease;
 }
 
 .comment-highlight:hover {
-  background: #fde68a;
+  opacity: 0.8;
 }
 
 .comment-highlight[data-comment-draft="true"] {
@@ -185,76 +166,55 @@
 }
 
 .comment-highlight[data-comment-draft="true"]:hover {
-  background: #bae6fd;
+  opacity: 0.8;
 }
 
 .comment-highlight[data-active-comment="true"] {
-  background: #dbeafe;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  outline: 2px solid var(--comment-base-color, #3b82f6);
+  outline-offset: 1px;
 }
 
-/* Tạo class thụt lề cho paragraph thông thường */
-.tiptap p[data-indent="1"] {
-    padding-left: 2rem;
-}
-.tiptap p[data-indent="2"] {
-    padding-left: 4rem;
-}
 
-/* Sửa lỗi căn lề cho List */
-.tiptap ul[style*="text-align: center"],
-.tiptap ol[style*="text-align: center"] {
-    list-style-position: inside;
-}
 
-.tiptap ul[style*="text-align: right"],
-.tiptap ol[style*="text-align: right"] {
-    list-style-position: inside;
+/* --- LEXICAL EDITOR STYLING --- */
+.editor-content {
+  outline: none;
 }
-
-ul[data-type="taskList"] {
-  list-style: none;
-  padding: 0;
+.editor-content p {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  line-height: 1.75;
 }
-
-ul[data-type="taskList"] p {
-  margin: 0;
+.editor-content h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
 }
-
-ul[data-type="taskList"] li {
-  display: flex;
+.editor-content h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
 }
-
-ul[data-type="taskList"] li > label {
-  flex: 0 0 auto;
-  margin-right: 0.5rem;
-  user-select: none;
-}
-
-ul[data-type="taskList"] li > div {
-  flex: 1 1 auto;
-}
-
-ul[data-type="taskList"] input[type="checkbox"] {
-  cursor: pointer;
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--primary);
-}
-
-.tiptap ul, 
-.tiptap ol {
-  padding: 0 1rem;
-  margin: 1.25rem 1rem 1.25rem 0.4rem;
-}
-
-.tiptap li {
-  display: list-item; 
+.editor-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1rem;
   margin-bottom: 0.5rem;
 }
-
-.tiptap li > p {
-  display: inline;
-  margin: 0;
+.editor-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
 }
+.editor-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.editor-content li {
+  margin-bottom: 0.25rem;
+}
+
 

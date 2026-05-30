@@ -11,7 +11,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import EditorMenuBar from "@/components/editor/EditorMenuBar";
 import EditorDynamicToolbar from "@/components/editor/EditorDynamicToolbar";
 import { MarginControls } from "@/components/editor/MarginControls";
-import { PaginatedEditorShell } from "@/components/editor/PaginatedEditorShell";
+import { PaginatedEditorShell, VerticalPageRuler } from "@/components/editor/PaginatedEditorShell";
 import { PageRuler } from "@/components/editor/PageRuler";
 import type { EditorMenuKey } from "@/types/editor-menu";
 import type {
@@ -19,21 +19,16 @@ import type {
   EditorToolbarState,
 } from "@/types/editor-toolbar";
 import type { EditorSelectionRange } from "@/types/editor-selection";
-import type { CommentMarkRange, DocumentComment } from "@/types/comment";
+import type { DocumentComment } from "@/types/comment";
 import { DEFAULT_PAGE_MARGINS, type PageMargins } from "@/types/page-layout";
 import { CommentPanel } from "@/components/comments/CommentPanel";
+import { EditorAdapter } from "@/types/editor-adapter";
 import {
   createDocumentComment,
   deleteDocumentComment,
   listDocumentComments,
   renameDashboardDocument,
-  updateDocumentComment,
-  updateDocumentCommentPosition,
 } from "@/services/document.service";
-import { useBroadcastEvent, useEventListener } from "@/lib/liveblocks.config";
-
-const COMMENT_REVALIDATE_INTERVAL_MS = 15000;
-type DocumentRole = "owner" | "editor" | "commenter" | "viewer" | string;
 
 function getCommentErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -45,18 +40,12 @@ export function AppLayout({
   title,
   editor,
   canEdit = true,
-  canComment = canEdit,
-  currentUserId,
-  currentRole,
 }: {
   children: ReactNode;
   documentId: string;
   title?: string;
-  editor: any;
+  editor: EditorAdapter | null;
   canEdit?: boolean;
-  canComment?: boolean;
-  currentUserId?: string | null;
-  currentRole?: DocumentRole | null;
 }) {
   const [activeMenu, setActiveMenu] = useState<EditorMenuKey>("format");
   const [selectedRange, setSelectedRange] =
@@ -74,32 +63,20 @@ export function AppLayout({
     useState<PageMargins>(DEFAULT_PAGE_MARGINS);
   const [showMarginControls, setShowMarginControls] = useState(false);
   const commentLoadRequestRef = useRef(0);
-  const hasLoadedCommentsRef = useRef(false);
   const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set());
   const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set());
   const deletingCommentIdsRef = useRef<Set<string>>(new Set());
-  const commentPositionSyncTimeoutsRef = useRef<Map<string, number>>(new Map());
-  const broadcastCommentEvent = useBroadcastEvent();
 
-  const loadComments = useCallback(async (options?: { showLoading?: boolean }) => {
-    const showLoading = options?.showLoading ?? true;
+  const loadComments = useCallback(async () => {
     const requestId = commentLoadRequestRef.current + 1;
     commentLoadRequestRef.current = requestId;
-    if (showLoading) {
-      setIsLoadingComments(true);
-    }
+    setIsLoadingComments(true);
+    setCommentError(null);
 
     try {
       const nextComments = await listDocumentComments(documentId);
       if (commentLoadRequestRef.current !== requestId) return;
-      hasLoadedCommentsRef.current = true;
       setComments(nextComments);
-      setActiveCommentId((current) =>
-        current && nextComments.some((comment) => comment.id === current)
-          ? current
-          : null,
-      );
-      setCommentError(null);
     } catch (error) {
       if (commentLoadRequestRef.current !== requestId) return;
       const isForbidden =
@@ -113,7 +90,7 @@ export function AppLayout({
         );
       }
     } finally {
-      if (showLoading && commentLoadRequestRef.current === requestId) {
+      if (commentLoadRequestRef.current === requestId) {
         setIsLoadingComments(false);
       }
     }
@@ -121,52 +98,11 @@ export function AppLayout({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      void loadComments({ showLoading: true });
+      void loadComments();
     }, 0);
 
     return () => {
       window.clearTimeout(timeoutId);
-    };
-  }, [loadComments]);
-
-  useEventListener(({ event }) => {
-    if (
-      event.type !== "DOCUMENT_COMMENT_CHANGED" ||
-      event.documentId !== documentId
-    ) {
-      return;
-    }
-
-    void loadComments({ showLoading: false });
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const revalidateComments = () => {
-      if (document.visibilityState === "hidden") return;
-      void loadComments({ showLoading: false });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        revalidateComments();
-      }
-    };
-
-    window.addEventListener("focus", revalidateComments);
-    window.addEventListener("online", revalidateComments);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    const intervalId = window.setInterval(() => {
-      revalidateComments();
-    }, COMMENT_REVALIDATE_INTERVAL_MS);
-
-    return () => {
-      window.removeEventListener("focus", revalidateComments);
-      window.removeEventListener("online", revalidateComments);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
     };
   }, [loadComments]);
 
@@ -184,26 +120,14 @@ export function AppLayout({
   const removeCommentMark = useCallback(
     (range: EditorSelectionRange | null) => {
       if (!editor || !hasValidRange(range)) return;
-
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from: range.from, to: range.to })
-        .unsetMark("comment")
-        .run();
+      editor.removeCommentMark(range);
     },
     [editor],
   );
 
   const applyDraftCommentMark = (range: EditorSelectionRange | null) => {
     if (!editor || !hasValidRange(range)) return;
-
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: range.from, to: range.to })
-      .setMark("comment", { commentId: "draft", isDraft: true })
-      .run();
+    editor.applyDraftCommentMark(range);
   };
 
   const clearDraftComment = useCallback(() => {
@@ -215,33 +139,7 @@ export function AppLayout({
   const removeCommentMarkById = useCallback(
     (commentId: string) => {
       if (!editor) return;
-
-      const commentMark = editor.schema.marks.comment;
-      if (!commentMark) return;
-
-      let transaction = editor.state.tr;
-
-      editor.state.doc.descendants((node: any, position: number) => {
-        if (!node.isText) return;
-
-        const targetCommentMarks = node.marks.filter(
-          (mark: any) =>
-            mark.type === commentMark && mark.attrs.commentId === commentId,
-        );
-        if (targetCommentMarks.length === 0) return;
-
-        targetCommentMarks.forEach((mark: any) => {
-          transaction = transaction.removeMark(
-            position,
-            position + node.nodeSize,
-            mark,
-          );
-        });
-      });
-
-      if (transaction.docChanged) {
-        editor.view.dispatch(transaction);
-      }
+      editor.removeCommentMarkById(commentId);
     },
     [editor],
   );
@@ -261,12 +159,6 @@ export function AppLayout({
           current === commentId ? null : current,
         );
         clearDraftComment();
-        broadcastCommentEvent({
-          type: "DOCUMENT_COMMENT_CHANGED",
-          documentId,
-          action: "deleted",
-          commentId,
-        });
       } catch (error) {
         console.warn("Unable to delete comment", error);
         setCommentError(
@@ -274,207 +166,32 @@ export function AppLayout({
         );
       }
     },
-    [broadcastCommentEvent, clearDraftComment, documentId, removeCommentMarkById],
-  );
-
-  const editComment = useCallback(
-    async (commentId: string, content: string) => {
-      try {
-        setCommentError(null);
-        const updatedComment = await updateDocumentComment(documentId, commentId, {
-          content,
-        });
-        setComments((prev) =>
-          prev.map((comment) =>
-            comment.id === updatedComment.id ? updatedComment : comment,
-          ),
-        );
-        broadcastCommentEvent({
-          type: "DOCUMENT_COMMENT_CHANGED",
-          documentId,
-          action: "updated",
-          commentId,
-        });
-      } catch (error) {
-        console.warn("Unable to edit comment", error);
-        setCommentError(
-          getCommentErrorMessage(error, "Unable to edit comment."),
-        );
-        throw error;
-      }
-    },
-    [broadcastCommentEvent, documentId],
-  );
-
-  const canManageOwnComments = canComment || canEdit || currentRole === "owner";
-  const canManageComment = useCallback(
-    (comment: DocumentComment) => {
-      if (currentRole === "owner") return true;
-      return Boolean(
-        currentUserId &&
-          comment.user.id === currentUserId &&
-          canManageOwnComments,
-      );
-    },
-    [canManageOwnComments, currentRole, currentUserId],
+    [clearDraftComment, documentId, removeCommentMarkById],
   );
 
   useEffect(() => {
-    if (!editor || !hasLoadedCommentsRef.current) return;
-
-    const commentMark = editor.schema.marks.comment;
-    if (!commentMark) return;
-
-    const commentIds = new Set(comments.map((comment) => comment.id));
-    const existingCommentIds = new Set<string>();
-    let transaction = editor.state.tr;
-
-    editor.state.doc.descendants((node: any, position: number) => {
-      if (!node.isText) return;
-
-      node.marks.forEach((mark: any) => {
-        const commentId = mark.attrs.commentId;
-        if (
-          mark.type !== commentMark ||
-          typeof commentId !== "string" ||
-          commentId === "draft"
-        ) {
-          return;
-        }
-
-        if (commentIds.has(commentId)) {
-          existingCommentIds.add(commentId);
-          return;
-        }
-
-        transaction = transaction.removeMark(
-          position,
-          position + node.nodeSize,
-          mark,
-        );
-        syncedCommentMarkIdsRef.current.delete(commentId);
-        recentlyCreatedCommentIdsRef.current.delete(commentId);
-        deletingCommentIdsRef.current.delete(commentId);
-      });
-    });
+    if (!editor || comments.length === 0) return;
 
     comments.forEach((comment) => {
-      if (existingCommentIds.has(comment.id)) return;
       if (
-        typeof comment.fromPos !== "number" ||
-        typeof comment.toPos !== "number" ||
-        comment.fromPos >= comment.toPos ||
-        comment.fromPos < 0 ||
-        comment.toPos > editor.state.doc.content.size
+        typeof comment.fromPos === "number" &&
+        typeof comment.toPos === "number" &&
+        comment.fromPos < comment.toPos
       ) {
-        return;
+        editor.addCommentMark(comment.fromPos, comment.toPos, comment.id);
+        syncedCommentMarkIdsRef.current.add(comment.id);
       }
-
-      transaction = transaction.addMark(
-        comment.fromPos,
-        comment.toPos,
-        commentMark.create({ commentId: comment.id, isDraft: false }),
-      );
-      existingCommentIds.add(comment.id);
-      syncedCommentMarkIdsRef.current.add(comment.id);
     });
-
-    if (transaction.docChanged) {
-      editor.view.dispatch(transaction);
-    }
   }, [editor, comments]);
 
-  useEffect(() => {
-    const pendingTimeouts = commentPositionSyncTimeoutsRef.current;
-
-    return () => {
-      pendingTimeouts.forEach((timeoutId) => {
-        window.clearTimeout(timeoutId);
-      });
-      pendingTimeouts.clear();
-    };
-  }, []);
-
   const handleCommentMarksChange = useCallback(
-    (commentRanges: CommentMarkRange[]) => {
-      const existingIds = new Set(
-        commentRanges.map((commentRange) => commentRange.commentId),
-      );
-      commentRanges.forEach(({ commentId }) => {
+    (existingCommentIds: string[]) => {
+      const existingIds = new Set(existingCommentIds);
+      existingCommentIds.forEach((commentId) => {
         syncedCommentMarkIdsRef.current.add(commentId);
         recentlyCreatedCommentIdsRef.current.delete(commentId);
         deletingCommentIdsRef.current.delete(commentId);
       });
-
-      const rangeByCommentId = new Map(
-        commentRanges.map((commentRange) => [commentRange.commentId, commentRange]),
-      );
-      const changedRanges = comments
-        .map((comment) => {
-          const nextRange = rangeByCommentId.get(comment.id);
-          if (!nextRange) return null;
-          if (
-            comment.fromPos === nextRange.fromPos &&
-            comment.toPos === nextRange.toPos
-          ) {
-            return null;
-          }
-          return nextRange;
-        })
-        .filter((commentRange): commentRange is CommentMarkRange =>
-          Boolean(commentRange),
-        );
-
-      if (changedRanges.length > 0) {
-        const changedRangeById = new Map(
-          changedRanges.map((commentRange) => [commentRange.commentId, commentRange]),
-        );
-        setComments((prev) =>
-          prev.map((comment) => {
-            const nextRange = changedRangeById.get(comment.id);
-            if (!nextRange) return comment;
-            return {
-              ...comment,
-              fromPos: nextRange.fromPos,
-              toPos: nextRange.toPos,
-            };
-          }),
-        );
-
-        changedRanges.forEach((commentRange) => {
-          const existingTimeout = commentPositionSyncTimeoutsRef.current.get(
-            commentRange.commentId,
-          );
-          if (existingTimeout !== undefined) {
-            window.clearTimeout(existingTimeout);
-          }
-
-          const timeoutId = window.setTimeout(() => {
-            commentPositionSyncTimeoutsRef.current.delete(commentRange.commentId);
-            void updateDocumentCommentPosition(documentId, commentRange.commentId, {
-              fromPos: commentRange.fromPos,
-              toPos: commentRange.toPos,
-            })
-              .then(() => {
-                broadcastCommentEvent({
-                  type: "DOCUMENT_COMMENT_CHANGED",
-                  documentId,
-                  action: "position",
-                  commentId: commentRange.commentId,
-                });
-              })
-              .catch((error) => {
-                console.warn("Unable to update comment position", error);
-                setCommentError("Unable to update comment position.");
-                void loadComments();
-              });
-          }, 600);
-          commentPositionSyncTimeoutsRef.current.set(
-            commentRange.commentId,
-            timeoutId,
-          );
-        });
-      }
 
       const removedIds = comments
         .filter((comment) => {
@@ -492,52 +209,51 @@ export function AppLayout({
         })
         .map((comment) => comment.id);
 
-      if (removedIds.length === 0) return;
+      // [FEATURE]: Real-time Broadcast.
+      // Nếu có một người khác vừa tạo comment, Yjs sẽ đồng bộ Mark sang máy này.
+      // Máy này nhận được ID lạ (chưa có trong state comments) thì sẽ tự động fetch DB.
+      const knownIds = new Set(comments.map(c => c.id));
+      const hasUnknownIds = existingCommentIds.some(id => id !== "draft" && !knownIds.has(id));
+      if (hasUnknownIds) {
+        void loadComments();
+      }
 
-      const removedIdSet = new Set(removedIds);
-      removedIds.forEach((commentId) => {
-        deletingCommentIdsRef.current.add(commentId);
-        syncedCommentMarkIdsRef.current.delete(commentId);
-        recentlyCreatedCommentIdsRef.current.delete(commentId);
-      });
-      setComments((prev) =>
-        prev.filter((comment) => !removedIdSet.has(comment.id)),
-      );
-      setActiveCommentId((current) =>
-        current && removedIdSet.has(current) ? null : current,
-      );
-
-      void Promise.allSettled(
-        removedIds.map((commentId) =>
-          deleteDocumentComment(documentId, commentId),
-        ),
-      ).then((results) => {
-        removedIds.forEach((commentId) => {
-          deletingCommentIdsRef.current.delete(commentId);
-        });
-
-        if (results.some((result) => result.status === "rejected")) {
-          setCommentError("Unable to delete removed comments.");
-          void loadComments();
-          return;
-        }
-
-        removedIds.forEach((commentId) => {
-          broadcastCommentEvent({
-            type: "DOCUMENT_COMMENT_CHANGED",
-            documentId,
-            action: "deleted",
-            commentId,
-          });
-        });
-      });
+      // [FIX]: Vô hiệu hoá tính năng tự động dọn rác (auto-delete orphaned comments).
+      // Việc tự động xoá sẽ gây ra race-condition khi Yjs chưa kịp tải xong text, 
+      // dẫn đến việc Editor báo cáo thiếu mark và Frontend tự động xoá nhầm comment của Owner.
+      // Bình luận mồ côi (khi text bị xoá) sẽ vẫn được giữ lại trong Comment Panel để user tự quyết định xoá bằng tay.
+      
+      // if (removedIds.length === 0) return;
+      // const removedIdSet = new Set(removedIds);
+      // removedIds.forEach((commentId) => {
+      //   deletingCommentIdsRef.current.add(commentId);
+      //   syncedCommentMarkIdsRef.current.delete(commentId);
+      //   recentlyCreatedCommentIdsRef.current.delete(commentId);
+      // });
+      // setComments((prev) =>
+      //   prev.filter((comment) => !removedIdSet.has(comment.id)),
+      // );
+      // setActiveCommentId((current) =>
+      //   current && removedIdSet.has(current) ? null : current,
+      // );
+      // void Promise.allSettled(
+      //   removedIds.map((commentId) =>
+      //     deleteDocumentComment(documentId, commentId),
+      //   ),
+      // ).then((results) => {
+      //   removedIds.forEach((commentId) => {
+      //     deletingCommentIdsRef.current.delete(commentId);
+      //   });
+      //   if (results.some((result) => result.status === "rejected")) {
+      //     setCommentError("Unable to delete removed comments.");
+      //     void loadComments();
+      //   }
+      // });
     },
-    [broadcastCommentEvent, comments, documentId, loadComments],
+    [comments, documentId, loadComments],
   );
 
   const handleStartCommentFromSelection = () => {
-    if (!canComment) return;
-
     const browserSelection =
       typeof window !== "undefined"
         ? window.getSelection()?.toString().trim()
@@ -575,12 +291,6 @@ export function AppLayout({
         documentId,
         commentPayload,
       );
-      broadcastCommentEvent({
-        type: "DOCUMENT_COMMENT_CHANGED",
-        documentId,
-        action: "created",
-        commentId: newComment.id,
-      });
 
       if (
         editor &&
@@ -589,13 +299,8 @@ export function AppLayout({
         newComment.fromPos < newComment.toPos
       ) {
         recentlyCreatedCommentIdsRef.current.add(newComment.id);
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: newComment.fromPos, to: newComment.toPos })
-          .unsetMark("comment")
-          .setMark("comment", { commentId: newComment.id, isDraft: false })
-          .run();
+        editor.removeCommentMark(commentDraftRange);
+        editor.addCommentMark(newComment.fromPos, newComment.toPos, newComment.id);
         syncedCommentMarkIdsRef.current.add(newComment.id);
         window.setTimeout(() => {
           recentlyCreatedCommentIdsRef.current.delete(newComment.id);
@@ -628,246 +333,70 @@ export function AppLayout({
     setSelectedRange(null);
   };
 
+  // Subscribe to editor adapter changes to re-render toolbar state
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    if (!editor) return;
+    return editor.subscribe(() => {
+      forceUpdate({});
+    });
+  }, [editor]);
+
   const toolbarActions: EditorToolbarActions = {
     onSave: () => console.log("save"),
-    onUndo: canEdit ? () => editor?.chain().focus().undo().run() : undefined,
-    onRedo: canEdit ? () => editor?.chain().focus().redo().run() : undefined,
-    onBold: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleBold().run();
-          console.log(
-            "[BOLD]",
-            result ? "Success" : "Failed",
-            editor?.isActive("bold"),
-          );
-        }
-      : undefined,
-    onItalic: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleItalic().run();
-          console.log(
-            "[ITALIC]",
-            result ? "Success" : "Failed",
-            editor?.isActive("italic"),
-          );
-        }
-      : undefined,
-    onUnderline: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleUnderline().run();
-          console.log(
-            "[UNDERLINE]",
-            result ? "Success" : "Failed",
-            editor?.isActive("underline"),
-          );
-        }
-      : undefined,
+    onUndo: canEdit ? () => editor?.undo() : undefined,
+    onRedo: canEdit ? () => editor?.redo() : undefined,
+    onBold: canEdit ? () => editor?.toggleBold() : undefined,
+    onItalic: canEdit ? () => editor?.toggleItalic() : undefined,
+    onUnderline: canEdit ? () => editor?.toggleUnderline() : undefined,
     onStyleChange: canEdit
       ? (style: string) => {
-          let result: boolean | undefined = false;
-          // Convert UI label to style value
-          const styleMap: { [key: string]: string } = {
+          const styleMap: { [key: string]: "paragraph" | "h1" | "h2" | "h3" } = {
             "Normal text": "paragraph",
             "Heading 1": "h1",
             "Heading 2": "h2",
             "Heading 3": "h3",
           };
-          const styleValue = styleMap[style] || style;
-
-          if (styleValue === "paragraph") {
-            result = editor?.chain().focus().clearNodes().setParagraph().run();
-          } else if (styleValue === "h1") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 1 })
-              .run();
-          } else if (styleValue === "h2") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 2 })
-              .run();
-          } else if (styleValue === "h3") {
-            result = editor
-              ?.chain()
-              .focus()
-              .clearNodes()
-              .toggleHeading({ level: 3 })
-              .run();
-          }
-          console.log(
-            "[STYLE]",
-            style,
-            "->",
-            styleValue,
-            result ? "Success" : "Failed",
-          );
-        }
-      : undefined,
-    onFontChange: canEdit
-      ? (font: string) => {
-          const result = editor?.chain().focus().setFontFamily(font).run();
-          console.log("[FONT]", font, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onFontSizeChange: canEdit
-      ? (size: string) => {
-          const sizeValue = size.replace("px", "");
-          const result = editor
-            ?.chain()
-            .focus()
-            .setFontSize(`${sizeValue}px`)
-            .run();
-          console.log("[FONT_SIZE]", size, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onTextColor: canEdit
-      ? (color: string) => {
-          const result = editor?.chain().focus().setColor(color).run();
-          console.log("[TEXT_COLOR]", color, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onHighlightColor: canEdit
-      ? (color: string) => {
-          const result = editor
-            ?.chain()
-            .focus()
-            .toggleHighlight({ color })
-            .run();
-          console.log("[HIGHLIGHT]", color, result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignLeft: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("left").run();
-          console.log("[ALIGN_LEFT]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignCenter: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("center").run();
-          console.log("[ALIGN_CENTER]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onAlignRight: canEdit
-      ? () => {
-          const result = editor?.chain().focus().setTextAlign("right").run();
-          console.log("[ALIGN_RIGHT]", result ? "Success" : "Failed");
-        }
-      : undefined,
-    onBulletList: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleBulletList().run();
-          console.log(
-            "[BULLET_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("bulletList"),
-          );
-        }
-      : undefined,
-    onNumberedList: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleOrderedList().run();
-          console.log(
-            "[ORDERED_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("orderedList"),
-          );
-        }
-      : undefined,
-    onChecklist: canEdit
-      ? () => {
-          const result = editor?.chain().focus().toggleTaskList().run();
-          console.log(
-            "[TASK_LIST]",
-            result ? "Success" : "Failed",
-            editor?.isActive("taskList"),
-          );
-        }
-      : undefined,
-    onDecreaseIndent: canEdit
-      ? () => {
-          // Check if can lift
-          if (editor?.can().liftListItem("listItem")) {
-            const result = editor
-              ?.chain()
-              .focus()
-              .liftListItem("listItem")
-              .run();
-            console.log("[DECREASE_INDENT]", result ? "Success" : "Failed");
-          } else {
-            console.log("[DECREASE_INDENT] Cannot lift - not in a list item");
+          const val = styleMap[style] || style;
+          if (val === "paragraph" || val === "h1" || val === "h2" || val === "h3") {
+            editor?.setStyle(val);
           }
         }
       : undefined,
-    onIncreaseIndent: canEdit
-      ? () => {
-          if (editor?.can().sinkListItem("listItem")) {
-            const result = editor
-              ?.chain()
-              .focus()
-              .sinkListItem("listItem")
-              .run();
-            console.log("[INCREASE_INDENT]", result ? "Success" : "Failed");
-          } else {
-            console.log(
-              "[INCREASE_INDENT] Cannot sink - not in a list item or no next item",
-            );
-          }
-        }
-      : undefined,
+    onFontChange: canEdit ? (font: string) => editor?.setFontFamily(font) : undefined,
+    onFontSizeChange: canEdit ? (size: string) => editor?.setFontSize(size) : undefined,
+    onTextColor: canEdit ? (color: string) => editor?.setColor(color) : undefined,
+    onHighlightColor: canEdit ? (color: string) => editor?.setHighlight(color) : undefined,
+    onAlignLeft: canEdit ? () => editor?.setTextAlign("left") : undefined,
+    onAlignCenter: canEdit ? () => editor?.setTextAlign("center") : undefined,
+    onAlignRight: canEdit ? () => editor?.setTextAlign("right") : undefined,
+    onBulletList: canEdit ? () => editor?.toggleBulletList() : undefined,
+    onNumberedList: canEdit ? () => editor?.toggleOrderedList() : undefined,
+    onChecklist: canEdit ? () => editor?.toggleTaskList() : undefined,
+    onDecreaseIndent: canEdit ? () => editor?.liftListItem() : undefined,
+    onIncreaseIndent: canEdit ? () => editor?.sinkListItem() : undefined,
     onInsertImage: () => console.log("insert image"),
     onInsertLink: () => console.log("insert link"),
-    onAddComment: canComment ? handleStartCommentFromSelection : undefined,
+    onAddComment: handleStartCommentFromSelection,
     onToggleMarginControls: () => setShowMarginControls((visible) => !visible),
-  };
-
-  // Lấy kiểu văn bản hiện tại
-  const getCurrentStyle = () => {
-    if (editor?.isActive("heading", { level: 1 })) return "h1";
-    if (editor?.isActive("heading", { level: 2 })) return "h2";
-    if (editor?.isActive("heading", { level: 3 })) return "h3";
-    return "paragraph";
-  };
-
-  // Lấy font hiện tại
-  const getCurrentFont = () => {
-    return editor?.getAttributes("textStyle").fontFamily || "Arial";
-  };
-
-  // Lấy cỡ chữ hiện tại
-  const getCurrentFontSize = () => {
-    return (
-      editor?.getAttributes("textStyle").fontSize?.replace("px", "") || "11"
-    );
-  };
-
-  // Lấy căn lề hiện tại
-  const getCurrentAlignment = () => {
-    if (editor?.isActive({ textAlign: "center" })) return "center";
-    if (editor?.isActive({ textAlign: "right" })) return "right";
-    return "left";
   };
 
   const toolbarState: EditorToolbarState = {
     zoom: "100%",
-    style: getCurrentStyle(),
-    font: getCurrentFont(),
-    fontSize: getCurrentFontSize(),
+    style: editor?.style || "paragraph",
+    font: editor?.fontFamily || "Arial",
+    fontSize: editor?.fontSize || "11",
     showRuler: false,
     showOutline: false,
     showMarginControls,
-    canUndo: editor?.can().undo() || false,
-    canRedo: editor?.can().redo() || false,
+    canUndo: editor?.canUndo || false,
+    canRedo: editor?.canRedo || false,
     activeMarks: {
-      bold: editor?.isActive("bold") || false,
-      italic: editor?.isActive("italic") || false,
-      underline: editor?.isActive("underline") || false,
+      bold: editor?.activeMarks.bold || false,
+      italic: editor?.activeMarks.italic || false,
+      underline: editor?.activeMarks.underline || false,
     },
-    activeAlignment: getCurrentAlignment(),
+    activeAlignment: editor?.alignment || "left",
   };
 
   const editorChildren = React.isValidElement<Record<string, unknown>>(children)
@@ -876,6 +405,7 @@ export function AppLayout({
         draftRange: commentDraftRange,
         comments,
         activeCommentId,
+        pageMargins,
         onSelectionChange: (range: EditorSelectionRange | null) => {
           if (!isComposerOpen) setSelectedRange(range);
         },
@@ -886,7 +416,7 @@ export function AppLayout({
     : children;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col print:h-auto print:block">
       <Navbar
         key={`${documentId}-${title}`}
         documentId={documentId}
@@ -900,39 +430,50 @@ export function AppLayout({
           clearDraftComment();
         }}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Menu bar + dynamic toolbar */}
-        <EditorMenuBar
-          activeMenu={activeMenu}
-          onChangeMenu={handleChangeMenu}
-        />
-        <EditorDynamicToolbar
-          activeMenu={activeMenu}
-          actions={toolbarActions}
-          state={toolbarState}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible print:block">
+        <div className="print:hidden">
+          {/* Menu bar + dynamic toolbar */}
+          <EditorMenuBar
+            activeMenu={activeMenu}
+            onChangeMenu={handleChangeMenu}
+          />
+          <EditorDynamicToolbar
+            activeMenu={activeMenu}
+            actions={toolbarActions}
+            state={toolbarState}
+          />
+        </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-hidden bg-gray-100">
-            <div className="flex h-full flex-col">
-              <PageRuler
-                margins={pageMargins}
-                onMarginsChange={setPageMargins}
-              />
-              {showMarginControls && (
-                <MarginControls
-                  margins={pageMargins}
-                  onChange={setPageMargins}
-                />
-              )}
-              <div className="flex-1 overflow-auto">
-                <PaginatedEditorShell
+        <div className="flex flex-1 overflow-hidden print:overflow-visible print:block">
+          <main className="flex-1 overflow-hidden bg-gray-100 print:overflow-visible print:bg-transparent print:block">
+            <div className="flex h-full flex-col print:overflow-visible print:block">
+              <div className="print:hidden">
+                <PageRuler
                   margins={pageMargins}
                   onMarginsChange={setPageMargins}
-                  pageCount={2}
-                >
-                  {editorChildren}
-                </PaginatedEditorShell>
+                />
+                {showMarginControls && (
+                  <MarginControls
+                    margins={pageMargins}
+                    onChange={setPageMargins}
+                  />
+                )}
+              </div>
+              <div className="flex flex-1 overflow-hidden print:overflow-visible print:block">
+                <div className="h-full shrink-0 z-10 print:hidden">
+                  <VerticalPageRuler
+                    margins={pageMargins}
+                    onMarginsChange={setPageMargins}
+                  />
+                </div>
+                <div className="flex-1 overflow-auto print:overflow-visible print:block">
+                  <PaginatedEditorShell
+                    margins={pageMargins}
+                    onMarginsChange={setPageMargins}
+                  >
+                    {editorChildren}
+                  </PaginatedEditorShell>
+                </div>
               </div>
             </div>
           </main>
@@ -956,10 +497,7 @@ export function AppLayout({
                 onSubmitComment={handleSubmitComment}
                 onCancelComposer={clearDraftComment}
                 onSelectComment={handleSelectComment}
-                onEditComment={editComment}
                 onDeleteComment={deleteComment}
-                canEditComment={canManageComment}
-                canDeleteComment={canManageComment}
               />
             </div>
           )}
