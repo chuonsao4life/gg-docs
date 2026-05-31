@@ -520,6 +520,7 @@ export default function LexicalEditor({
         <ClickableLinkPlugin />
         <TablePlugin />
         <HorizontalRulePlugin />
+        
         {/* Real-time Collaboration */}
         {yProvider && (
           <LexicalCollaboration>

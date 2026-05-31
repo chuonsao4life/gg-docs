@@ -2,7 +2,7 @@
 
 import React from "react"
 import ToolbarIconButton from "@/components/editor/ToolbarIconButton"
-import { Image as ImageIcon, Link, Unlink, MessageSquare, Table, Minus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2 } from "lucide-react"
+import { Image as ImageIcon, Link, Unlink, MessageSquare, Table, Minus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2, Rows3, Columns3, Delete, TableProperties } from "lucide-react"
 export default function InsertToolbar({ actions, state, disabled }: { actions?: any; state?: any; disabled?: boolean }) {
     console.log("Current State:", state);
     return (
@@ -21,14 +21,16 @@ export default function InsertToolbar({ actions, state, disabled }: { actions?: 
             {state?.isInsideTable && (
                 <>
                     <div className="w-px h-6 bg-gray-300 mx-1" />
-                    <ToolbarIconButton label="Thêm Hàng Trên" icon={<ArrowUp className="h-4 w-4" />} onClick={actions?.onInsertRowAbove} disabled={disabled} />
-                    <ToolbarIconButton label="Thêm Hàng Dưới" icon={<ArrowDown className="h-4 w-4" />} onClick={actions?.onInsertRowBelow} disabled={disabled} />
-                    <ToolbarIconButton label="Thêm Cột Trái" icon={<ArrowLeft className="h-4 w-4" />} onClick={actions?.onInsertColumnLeft} disabled={disabled} />
-                    <ToolbarIconButton label="Thêm Cột Phải" icon={<ArrowRight className="h-4 w-4" />} onClick={actions?.onInsertColumnRight} disabled={disabled} />
+                    <div className="flex gap-0.5">
+                        <ToolbarIconButton label="Thêm hàng trên" icon={<ArrowUp className="h-3.5 w-3.5" />} onClick={actions?.onInsertRowAbove} disabled={disabled} />
+                        <ToolbarIconButton label="Thêm hàng dưới" icon={<ArrowDown className="h-3.5 w-3.5" />} onClick={actions?.onInsertRowBelow} disabled={disabled} />
+                        <ToolbarIconButton label="Thêm cột trái" icon={<ArrowLeft className="h-3.5 w-3.5" />} onClick={actions?.onInsertColumnLeft} disabled={disabled} />
+                        <ToolbarIconButton label="Thêm cột phải" icon={<ArrowRight className="h-3.5 w-3.5" />} onClick={actions?.onInsertColumnRight} disabled={disabled} />
+                    </div>
                     <div className="w-px h-6 bg-gray-300 mx-1" />
-                    <ToolbarIconButton label="Xóa Hàng" icon={<Trash2 className="h-4 w-4 text-red-500" />} onClick={actions?.onDeleteRow} disabled={disabled} />
-                    <ToolbarIconButton label="Xóa Cột" icon={<Trash2 className="h-4 w-4 text-red-500" />} onClick={actions?.onDeleteColumn} disabled={disabled} />
-                    <ToolbarIconButton label="Xóa Bảng" icon={<Trash2 className="h-4 w-4 text-red-700" />} onClick={actions?.onDeleteTable} disabled={disabled} />
+                    <ToolbarIconButton label="Xóa hàng" icon={<Rows3 className="h-3.5 w-3.5 text-red-600" />} onClick={actions?.onDeleteRow} disabled={disabled} />
+                    <ToolbarIconButton label="Xóa cột" icon={<Columns3 className="h-3.5 w-3.5 text-red-600" />} onClick={actions?.onDeleteColumn} disabled={disabled} />
+                    <ToolbarIconButton label="Xóa bảng" icon={<TableProperties className="h-4 w-4 text-red-600" />} onClick={actions?.onDeleteTable} disabled={disabled} />
                 </>
             )}
         </div>
