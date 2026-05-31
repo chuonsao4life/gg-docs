@@ -2,7 +2,7 @@
 
 import React from "react"
 import ToolbarIconButton from "@/components/editor/ToolbarIconButton"
-import { Image as ImageIcon, Link, Unlink, MessageSquare, Table, Minus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Trash2, Rows3, Columns3, Delete, TableProperties } from "lucide-react"
+import { Image as ImageIcon, Link, Unlink, MessageSquare, Table, Minus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Rows3, Columns3, TableProperties } from "lucide-react"
 export default function InsertToolbar({ actions, state, disabled }: { actions?: any; state?: any; disabled?: boolean }) {
     console.log("Current State:", state);
     return (
