@@ -11,7 +11,10 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
-
+import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
+import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
+import { ImageNode } from "./nodes/ImageNodes";
+import { ClickableLinkPlugin } from "@lexical/react/LexicalClickableLinkPlugin"
 import {
   $getSelection,
   $isRangeSelection,
@@ -22,7 +25,7 @@ import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { ListNode, ListItemNode } from "@lexical/list";
 import { LinkNode } from "@lexical/link";
 import { MarkNode, $isMarkNode } from "@lexical/mark";
-
+import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalAdapter } from "./adapters/LexicalAdapter";
 import type { DocumentComment } from "@/types/comment";
 import type { EditorSelectionRange } from "@/types/editor-selection";
@@ -32,26 +35,34 @@ import { getStableColor, getHighlightColor } from "@/lib/colors";
 
 import * as Y from "yjs";
 import { LiveblocksYjsProvider } from "@liveblocks/yjs";
+import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { HorizontalRulePlugin } from "@lexical/react/LexicalHorizontalRulePlugin";
 
 // Custom Lexical Theme
 const theme = {
-  paragraph: "relative mb-2 leading-7",
+  paragraph: "relative mb-2 leading-normal",
   heading: {
-    h1: "text-2xl font-bold mb-4 mt-6",
-    h2: "text-xl font-semibold mb-3 mt-4",
-    h3: "text-lg font-medium mb-2 mt-4",
+    h1: "text-[36px] font-bold mb-4 mt-6 leading-tight", 
+    h2: "text-[30px] font-semibold mb-3 mt-4 leading-tight",
+    h3: "text-[24px] font-medium mb-2 mt-4 leading-tight", 
   },
   list: {
-    ol: "list-decimal list-inside mb-4",
-    ul: "list-disc list-inside mb-4",
-    listitem: "ml-4 mb-1",
+    ol: "list-decimal list-inside ml-6 mb-4",
+    ul: "list-disc list-inside ml-6 mb-4",
+    listitem: "mb-1 ml-2",
+    listitemUnchecked: "relative !list-none pl-6 !ml-0 mb-1 cursor-pointer before:absolute before:left-0 before:top-[0.6em] before:-translate-y-1/2 before:w-3.5 before:h-3.5 before:border before:border-slate-500 before:bg-white before:rounded-none before:content-['']",
+    listitemChecked: "relative !list-none pl-6 !ml-0 mb-1 line-through text-slate-400 cursor-pointer before:absolute before:left-0 before:top-[0.6em] before:-translate-y-1/2 before:w-3.5 before:h-3.5 before:bg-blue-500 before:rounded-none before:content-['✓'] before:text-white before:text-[10px] before:font-bold before:flex before:items-center before:justify-center",
   },
   text: {
     bold: "font-bold",
     italic: "italic",
     underline: "underline",
   },
+  link: "text-blue-600 underline cursor-pointer",
   mark: "comment-highlight",
+  table: "border-collapse border border-slate-300 w-full my-4 table-fixed bg-white",
+  tableCell: "border border-slate-300 p-2 min-w-[75px] align-top relative bg-white",
+  tableCellHeader: "bg-white font-bold border border-slate-300 p-2",
 };
 
 interface LexicalEditorProps {
@@ -296,6 +307,11 @@ function LexicalPaginationPlugin({
     for (let i = 0; i < metrics.length; i++) {
       const { h, mt, mb, element } = metrics[i];
 
+      if (element.tagName === "TABLE" || element.getAttribute('data-lexical-table') === 'true') {
+        physicalY += h + mt + mb;
+        continue;
+      }
+
       const elementStart = physicalY + mt;
       const positionInCycle = elementStart % cycleLength;
 
@@ -337,6 +353,36 @@ function LexicalPaginationPlugin({
   return null;
 }
 
+// 5. Plugin tự động đồng bộ Style của chữ lên Dấu chấm/Số (THÊM MỚI Ở ĐÂY)
+function LexicalListStylePlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    const removeUpdateListener = editor.registerUpdateListener(() => {
+      window.requestAnimationFrame(() => {
+        const rootElement = editor.getRootElement();
+        if (!rootElement) return;
+
+        const listItems = rootElement.querySelectorAll("li");
+        listItems.forEach((li) => {
+          const firstText = li.querySelector("span");
+          if (firstText) {
+            li.style.fontSize = firstText.style.fontSize;
+            li.style.fontFamily = firstText.style.fontFamily;
+            li.style.color = firstText.style.color;
+          }
+        });
+      });
+    });
+
+    return () => {
+      removeUpdateListener();
+    };
+  }, [editor]);
+
+  return null;
+}
+
 function LexicalEditablePlugin({ editable }: { editable: boolean }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
@@ -367,7 +413,19 @@ export default function LexicalEditor({
     editorState: null,
     namespace: "GoogleDocsClone",
     theme,
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, MarkNode],
+    nodes: [
+      HeadingNode, 
+      QuoteNode, 
+      TableNode,
+      TableRowNode,
+      TableCellNode,
+      ListNode, 
+      ListItemNode, 
+      LinkNode, 
+      MarkNode,
+      ImageNode,
+      HorizontalRuleNode,
+    ],
     editable: canEdit ?? false,
     onError: (error: Error) => console.error("[Lexical Error]", error),
   };
@@ -404,20 +462,23 @@ export default function LexicalEditor({
 
         <RichTextPlugin
           contentEditable={
-            <ContentEditable className="focus:outline-none min-h-full prose prose-sm max-w-none editor-content" />
-          }
-          placeholder={
-            <div className="absolute top-0 left-0 pointer-events-none text-muted-foreground text-sm pl-1 pt-1 opacity-50">
-              Start writing here...
-            </div>
+            <ContentEditable className="focus:outline-none min-h-full prose prose-sm max-w-none editor-content" 
+            style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}/>
+            
           }
           ErrorBoundary={LexicalErrorBoundary}
         />
 
-        <HistoryPlugin />
         <ListPlugin />
+        <CheckListPlugin />
+        
+        {/* Kích hoạt plugin đồng bộ ở đây */}
+        <LexicalListStylePlugin />
+        
         <LinkPlugin />
-
+        <ClickableLinkPlugin />
+        <TablePlugin />
+        <HorizontalRulePlugin />
         {/* Real-time Collaboration */}
         {yProvider && (
           <LexicalCollaboration>

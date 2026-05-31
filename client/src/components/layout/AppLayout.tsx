@@ -334,12 +334,23 @@ export function AppLayout({
   };
 
   // Subscribe to editor adapter changes to re-render toolbar state
+  // Subscribe to editor adapter changes to re-render toolbar state
   const [, forceUpdate] = useState({});
   useEffect(() => {
     if (!editor) return;
-    return editor.subscribe(() => {
+
+    const initTimer = setTimeout(() => {
+      forceUpdate({});
+    }, 0);
+
+    const unsubscribe = editor.subscribe(() => {
       forceUpdate({});
     });
+
+    return () => {
+      clearTimeout(initTimer);
+      unsubscribe();
+    };
   }, [editor]);
 
   const toolbarActions: EditorToolbarActions = {
@@ -352,7 +363,7 @@ export function AppLayout({
     onStyleChange: canEdit
       ? (style: string) => {
           const styleMap: { [key: string]: "paragraph" | "h1" | "h2" | "h3" } = {
-            "Normal text": "paragraph",
+            "Paragraph": "paragraph",
             "Heading 1": "h1",
             "Heading 2": "h2",
             "Heading 3": "h3",
@@ -370,15 +381,63 @@ export function AppLayout({
     onAlignLeft: canEdit ? () => editor?.setTextAlign("left") : undefined,
     onAlignCenter: canEdit ? () => editor?.setTextAlign("center") : undefined,
     onAlignRight: canEdit ? () => editor?.setTextAlign("right") : undefined,
+    onAlignJustify: canEdit ? () => editor?.setTextAlign("justify") : undefined,
     onBulletList: canEdit ? () => editor?.toggleBulletList() : undefined,
     onNumberedList: canEdit ? () => editor?.toggleOrderedList() : undefined,
     onChecklist: canEdit ? () => editor?.toggleTaskList() : undefined,
     onDecreaseIndent: canEdit ? () => editor?.liftListItem() : undefined,
     onIncreaseIndent: canEdit ? () => editor?.sinkListItem() : undefined,
-    onInsertImage: () => console.log("insert image"),
-    onInsertLink: () => console.log("insert link"),
+    onInsertLink: canEdit ? () => {
+      const url = window.prompt("Nhập đường dẫn liên kết (URL):", "https://");
+      if (url !== null) {
+          editor?.insertLink(url || null); 
+      }
+    } : undefined,
+    onRemoveLink: canEdit ? () => editor?.insertLink(null) : undefined,
+    
+    onInsertImage: canEdit ? () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/png, image/jpeg, image/gif, image/webp"; // Chỉ chấp nhận ảnh
+      
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64String = event.target?.result as string;
+            
+            editor?.insertImage(base64String);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      input.click();
+    } : undefined,
     onAddComment: handleStartCommentFromSelection,
     onToggleMarginControls: () => setShowMarginControls((visible) => !visible),
+    onInsertTable: canEdit
+      ? () => {
+          const rowsStr = window.prompt("Nhập số HÀNG bạn muốn tạo:", "3");
+          if (!rowsStr) return;
+          
+          const colsStr = window.prompt("Nhập số CỘT bạn muốn tạo:", "3");
+          if (!colsStr) return;
+
+          const rows = parseInt(rowsStr, 10) || 3;
+          const cols = parseInt(colsStr, 10) || 3;
+          editor?.insertTable(rows, cols);
+        }
+      : undefined,
+    onInsertRowAbove: canEdit ? () => editor?.insertRowAbove() : undefined,
+    onInsertRowBelow: canEdit ? () => editor?.insertRowBelow() : undefined,
+    onInsertColumnLeft: canEdit ? () => editor?.insertColumnLeft() : undefined,
+    onInsertColumnRight: canEdit ? () => editor?.insertColumnRight() : undefined,
+    onDeleteRow: canEdit ? () => editor?.deleteRow() : undefined,
+    onDeleteColumn: canEdit ? () => editor?.deleteColumn() : undefined,
+    onDeleteTable: canEdit ? () => editor?.deleteTable() : undefined,
+    onInsertHorizontalLine: canEdit ? () => editor?.insertHorizontalLine() : undefined,
   };
 
   const toolbarState: EditorToolbarState = {
@@ -386,6 +445,8 @@ export function AppLayout({
     style: editor?.style || "paragraph",
     font: editor?.fontFamily || "Arial",
     fontSize: editor?.fontSize || "11",
+    textColor: editor?.textColor || "#000000",
+    highlightColor: editor?.highlightColor || "transparent",
     showRuler: false,
     showOutline: false,
     showMarginControls,
@@ -396,7 +457,9 @@ export function AppLayout({
       italic: editor?.activeMarks.italic || false,
       underline: editor?.activeMarks.underline || false,
     },
-    activeAlignment: editor?.alignment || "left",
+    alignment: editor?.alignment || "left",
+    isLink: editor?.isLink || false,
+    isInsideTable: editor?.isInsideTable || false,
   };
 
   const editorChildren = React.isValidElement<Record<string, unknown>>(children)

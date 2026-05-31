@@ -13,8 +13,8 @@ export interface EditorAdapter {
   readonly fontSize: string;
   readonly textColor: string;
   readonly highlightColor: string;
-  readonly alignment: "left" | "center" | "right";
-  readonly style: "paragraph" | "h1" | "h2" | "h3";
+  readonly alignment: "left" | "center" | "right" | "justify";
+  readonly style: "paragraph" | "h1" | "h2" | "h3" | "bullet" | "number" | "check";
   readonly isEmpty: boolean;
 
   // Formatting operations
@@ -23,12 +23,12 @@ export interface EditorAdapter {
   toggleBold(): void;
   toggleItalic(): void;
   toggleUnderline(): void;
-  setStyle(style: "paragraph" | "h1" | "h2" | "h3"): void;
+  setStyle(style: "paragraph" | "h1" | "h2" | "h3" | "bullet" | "number" | "check"): void;
   setFontFamily(font: string): void;
   setFontSize(size: string): void;
   setColor(color: string): void;
   setHighlight(color: string): void;
-  setTextAlign(alignment: "left" | "center" | "right"): void;
+  setTextAlign(alignment: "left" | "center" | "right" | "justify"): void;
   toggleBulletList(): void;
   toggleOrderedList(): void;
   toggleTaskList(): void;
@@ -46,4 +46,18 @@ export interface EditorAdapter {
 
   // Collaboration updates
   updateUser(user: { name: string; color: string }): void;
+  insertTable(rows?: number, columns?: number): void;
+  insertRowAbove(): void;
+  insertRowBelow(): void;
+  insertColumnLeft(): void;
+  insertColumnRight(): void;
+  deleteRow(): void;
+  deleteColumn(): void;
+  deleteTable(): void;
+  insertLink(url: string | null): void;
+  insertImage(url: string): void;
+  insertHorizontalLine(): void;
+
+  readonly isLink: boolean;
+  readonly isInsideTable: boolean;
 }
