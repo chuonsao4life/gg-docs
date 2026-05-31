@@ -21,6 +21,7 @@ import {
 import { getStoredAccessToken, getStoredUser, onSessionChange } from "@/services/auth.service";
 import { getStableColor } from "@/lib/colors";
 
+
 type Props = {
   params: Promise<{
     documentId: string;

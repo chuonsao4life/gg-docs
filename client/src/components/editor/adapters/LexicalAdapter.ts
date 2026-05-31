@@ -28,7 +28,10 @@ import { $isHeadingNode, $createHeadingNode } from "@lexical/rich-text";
 import {
   INSERT_UNORDERED_LIST_COMMAND,
   INSERT_ORDERED_LIST_COMMAND,
+  INSERT_CHECK_LIST_COMMAND,
   REMOVE_LIST_COMMAND,
+  $isListNode,
+  ListNode,
 } from "@lexical/list";
 import {
   $wrapSelectionInMarkNode,
@@ -37,8 +40,22 @@ import {
   MarkNode,
 } from "@lexical/mark";
 
+import {
+  INSERT_TABLE_COMMAND,
+  $insertTableRowAtSelection,
+  $insertTableColumnAtSelection,
+  $deleteTableRowAtSelection,
+  $deleteTableColumnAtSelection,
+  $getTableCellNodeFromLexicalNode,
+  $getTableNodeFromLexicalNodeOrThrow,
+} from "@lexical/table";
+
 import type { EditorAdapter } from "@/types/editor-adapter";
 import type { EditorSelectionRange } from "@/types/editor-selection";
+
+import { TOGGLE_LINK_COMMAND } from "@lexical/link";
+import { $createImageNode } from "../nodes/ImageNodes";
+import { INSERT_HORIZONTAL_RULE_COMMAND } from "@lexical/react/LexicalHorizontalRuleNode";
 
 function getDescendants(node: any): any[] {
   const descendants: any[] = [];
@@ -58,20 +75,24 @@ export class LexicalAdapter implements EditorAdapter {
   private _canUndo = false;
   private _canRedo = false;
   private _activeMarks = { bold: false, italic: false, underline: false };
+  
   private _fontFamily = "Arial";
   private _fontSize = "11";
   private _textColor = "#000000";
   private _highlightColor = "transparent";
-  private _alignment: "left" | "center" | "right" = "left";
-  private _style: "paragraph" | "h1" | "h2" | "h3" = "paragraph";
+  
+  private _alignment: "left" | "center" | "right" | "justify" = "left";
+  private _style: "paragraph" | "h1" | "h2" | "h3" | "bullet" | "number" | "check" = "paragraph";
+  
   private _isEmpty = true;
+  
+  private _lastSelection: any = null;
 
   private listeners = new Set<() => void>();
 
   constructor(editor: LexicalEditor) {
     this.editor = editor;
 
-    // Listen to history commands to update undo/redo status
     this.editor.registerCommand(
       CAN_UNDO_COMMAND,
       (payload: boolean) => {
@@ -92,17 +113,33 @@ export class LexicalAdapter implements EditorAdapter {
       COMMAND_PRIORITY_CRITICAL
     );
 
-    // Watch for updates to keep formatting attributes in sync
     this.editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          this._lastSelection = selection.clone();
+        }
+        
         this.updateState();
       });
       this.notifyListeners();
     });
   }
 
+  private _restoreSelection() {
+    let selection = $getSelection();
+    if (!$isRangeSelection(selection) && this._lastSelection !== null) {
+      $setSelection(this._lastSelection.clone());
+      return $getSelection();
+    }
+    return selection;
+  }
+
   private updateState() {
+    const root = $getRoot();
+    this._isEmpty = root.getTextContentSize() === 0;
     const selection = $getSelection();
+    
     if ($isRangeSelection(selection)) {
       try {
         this._activeMarks = {
@@ -111,130 +148,191 @@ export class LexicalAdapter implements EditorAdapter {
           underline: selection.hasFormat("underline"),
         };
 
-        this._fontFamily = $getSelectionStyleValueForProperty(
-          selection,
-          "font-family",
-          "Arial"
-        );
-        this._fontSize = $getSelectionStyleValueForProperty(
-          selection,
-          "font-size",
-          "11px"
-        ).replace("px", "");
-        this._textColor = $getSelectionStyleValueForProperty(
-          selection,
-          "color",
-          "#000000"
-        );
-        this._highlightColor = $getSelectionStyleValueForProperty(
-          selection,
-          "background-color",
-          "transparent"
-        );
+        let rawFontFamily = $getSelectionStyleValueForProperty(selection, "font-family", "Arial");
+        let rawFontSize = $getSelectionStyleValueForProperty(selection, "font-size", "11px");
+
+        this._fontFamily = rawFontFamily.replace(/['"]/g, "");
+        this._fontSize = rawFontSize.replace(/[^0-9.]/g, "");
+
+        this._textColor = $getSelectionStyleValueForProperty(selection, "color", "#000000");
+        this._highlightColor = $getSelectionStyleValueForProperty(selection, "background-color", "transparent");
 
         const nodes = selection.getNodes();
-        let alignment: "left" | "center" | "right" = "left";
-        let style: "paragraph" | "h1" | "h2" | "h3" = "paragraph";
+        let alignment: "left" | "center" | "right" | "justify" = "left";
+        let style: "paragraph" | "h1" | "h2" | "h3" | "bullet" | "number" | "check" = "paragraph";
 
         if (nodes.length > 0) {
           const firstNode = nodes[0];
-          const parent = firstNode.getParent();
+          let currentNode: any = firstNode.getParent();
           
-          if ($isElementNode(parent)) {
-            const format = parent.getFormatType();
-            if (format === "left" || format === "center" || format === "right") {
-              alignment = format;
+          if ($isElementNode(currentNode)) {
+            const format = currentNode.getFormatType();
+            if (format === "left" || format === "center" || format === "right" || format === "justify") alignment = format;
+          }
+
+          while (currentNode !== null && currentNode !== root) {
+            if ($isListNode(currentNode)) {
+              const listType = (currentNode as ListNode).getListType();
+              style = listType === "number" ? "number" : listType === "check" ? "check" : "bullet";
+              break;
             }
-            
-            const type = parent.getType();
-            if (type === "heading") {
-              const tag = (parent as HeadingNode).getTag();
-              if (tag === "h1" || tag === "h2" || tag === "h3") {
-                style = tag;
-              }
+            if (currentNode.getType() === "heading") {
+              style = (currentNode as HeadingNode).getTag() as any;
+              break;
             }
+            currentNode = currentNode.getParent();
           }
         }
         
         this._alignment = alignment;
-        this._style = style;
+        this._style = style as any;
+
+        // Xử lý bật sáng nút Bold trên thanh Toolbar nếu đang ở chế độ Heading
+        if (style === "h1" || style === "h2" || style === "h3") {
+          this._activeMarks.bold = true;
+        }
+
+        // Bù trừ size UI cho Heading
+        if (rawFontSize === "11px" || rawFontSize === "") {
+          if (style === "h1") this._fontSize = "36";
+          else if (style === "h2") this._fontSize = "30";
+          else if (style === "h3") this._fontSize = "24";
+        }
+
       } catch (error) {
-        // Ignore stale selection offset errors during complex node mutations (like wrapping text in a comment MarkNode)
         console.warn("Ignored stale selection error during formatting extraction.");
       }
+    } 
+    else {
+      const firstTextNode = root.getAllTextNodes()[0];
+      
+      if (firstTextNode && typeof firstTextNode.getStyle === 'function') {
+        const styleStr = firstTextNode.getStyle() || "";
+        const extractStyle = (prop: string, fallback: string) => {
+          const regex = new RegExp(`${prop}\\s*:\\s*([^;]+)`);
+          const match = styleStr.match(regex);
+          return match ? match[1].trim() : fallback;
+        };
+
+        this._fontFamily = extractStyle("font-family", "Arial").replace(/['"]/g, "");
+        let rawFontSize = extractStyle("font-size", "11px");
+        this._fontSize = rawFontSize.replace(/[^0-9.]/g, "");
+        
+        this._textColor = extractStyle("color", "#000000");
+        this._highlightColor = extractStyle("background-color", "transparent");
+        
+        let currentNode: any = firstTextNode.getParent();
+        this._style = "paragraph";
+
+        if ($isElementNode(currentNode)) {
+          const format = currentNode.getFormatType();
+          if (format === "left" || format === "center" || format === "right" || format === "justify") this._alignment = format;
+        }
+
+        while (currentNode !== null && currentNode !== root) {
+          if ($isListNode(currentNode)) {
+            const listType = (currentNode as ListNode).getListType();
+            this._style = listType === "number" ? "number" : listType === "check" ? "check" : "bullet";
+            break;
+          }
+          if (currentNode.getType() === "heading") {
+            this._style = (currentNode as HeadingNode).getTag() as any;
+            break;
+          }
+          currentNode = currentNode.getParent();
+        }
+
+        if (this._style === "h1" || this._style === "h2" || this._style === "h3") {
+          this._activeMarks.bold = true;
+        }
+
+        if (rawFontSize === "11px" || !styleStr.includes("font-size")) {
+          if (this._style === "h1") this._fontSize = "36";
+          else if (this._style === "h2") this._fontSize = "30";
+          else if (this._style === "h3") this._fontSize = "24";
+        }
+
+      } else {
+        this._fontFamily = "Arial";
+        this._fontSize = "11";
+        this._textColor = "#000000";
+        this._highlightColor = "transparent";
+        this._style = "paragraph";
+        this._alignment = "left";
+      }
     }
-
-    const root = $getRoot();
-    this._isEmpty = root.getTextContentSize() === 0;
   }
 
-  get canUndo() {
-    return this._canUndo;
-  }
-  get canRedo() {
-    return this._canRedo;
-  }
-  get activeMarks() {
-    return this._activeMarks;
-  }
-  get fontFamily() {
-    return this._fontFamily;
-  }
-  get fontSize() {
-    return this._fontSize;
-  }
-  get textColor() {
-    return this._textColor;
-  }
-  get highlightColor() {
-    return this._highlightColor;
-  }
-  get alignment() {
-    return this._alignment;
-  }
-  get style() {
-    return this._style;
-  }
-  get isEmpty() {
-    return this._isEmpty;
-  }
+  get canUndo() { return this._canUndo; }
+  get canRedo() { return this._canRedo; }
+  get activeMarks() { return this._activeMarks; }
+  get fontFamily() { return this._fontFamily; }
+  get fontSize() { return this._fontSize; }
+  get textColor() { return this._textColor; }
+  get highlightColor() { return this._highlightColor; }
+  get alignment() { return this._alignment; }
+  get style() { return this._style; }
+  get isEmpty() { return this._isEmpty; }
 
-  undo() {
-    this.editor.dispatchCommand(UNDO_COMMAND, undefined);
-  }
-
-  redo() {
-    this.editor.dispatchCommand(REDO_COMMAND, undefined);
-  }
-
-  toggleBold() {
-    this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold");
-  }
-
-  toggleItalic() {
-    this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "italic");
-  }
-
-  toggleUnderline() {
-    this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "underline");
-  }
+  undo() { this.editor.dispatchCommand(UNDO_COMMAND, undefined); }
+  redo() { this.editor.dispatchCommand(REDO_COMMAND, undefined); }
+  toggleBold() { this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold"); }
+  toggleItalic() { this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "italic"); }
+  toggleUnderline() { this.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "underline"); }
 
   setStyle(style: "paragraph" | "h1" | "h2" | "h3") {
+    this.editor.focus();
     this.editor.update(() => {
-      const selection = $getSelection();
+      const selection = this._restoreSelection();
       if ($isRangeSelection(selection)) {
+        
         if (style === "paragraph") {
           $setBlocksType(selection, () => $createParagraphNode());
         } else {
           $setBlocksType(selection, () => $createHeadingNode(style));
+        }
+
+        const freshSelection = $getSelection();
+        if ($isRangeSelection(freshSelection)) {
+          const nodes = freshSelection.getNodes();
+          const blocks = new Set();
+          
+          nodes.forEach(node => {
+            let parent: any = node.getParent();
+            while (parent !== null && parent.getType() !== "root" && !$isElementNode(parent)) {
+              parent = parent.getParent();
+            }
+            if (parent !== null) blocks.add(parent);
+          });
+
+          blocks.forEach((block: any) => {
+            const descendants = getDescendants(block);
+            descendants.forEach(node => {
+              if (typeof node.getStyle === 'function' && typeof node.setStyle === 'function') {
+                let currentStyle = node.getStyle() || "";
+                
+                currentStyle = currentStyle
+                  .replace(/font-size\s*:\s*[^;]+;?/gi, "")
+                  .replace(/font-weight\s*:\s*[^;]+;?/gi, "");
+                
+                // Nếu đổi về Paragraph thì bơm lại size 11px chuẩn
+                if (style === "paragraph") {
+                  currentStyle += " font-size: 11px;";
+                }
+                
+                node.setStyle(currentStyle.trim());
+              }
+            });
+          });
         }
       }
     });
   }
 
   setFontFamily(font: string) {
+    this.editor.focus();
     this.editor.update(() => {
-      const selection = $getSelection();
+      const selection = this._restoreSelection();
       if ($isRangeSelection(selection)) {
         $patchStyleText(selection, { "font-family": font });
       }
@@ -242,8 +340,9 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   setFontSize(size: string) {
+    this.editor.focus();
     this.editor.update(() => {
-      const selection = $getSelection();
+      const selection = this._restoreSelection();
       if ($isRangeSelection(selection)) {
         const pxValue = size.endsWith("px") ? size : `${size}px`;
         $patchStyleText(selection, { "font-size": pxValue });
@@ -252,8 +351,9 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   setColor(color: string) {
+    this.editor.focus();
     this.editor.update(() => {
-      const selection = $getSelection();
+      const selection = this._restoreSelection();
       if ($isRangeSelection(selection)) {
         $patchStyleText(selection, { color });
       }
@@ -261,21 +361,21 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   setHighlight(color: string) {
+    this.editor.focus();
     this.editor.update(() => {
-      const selection = $getSelection();
+      const selection = this._restoreSelection();
       if ($isRangeSelection(selection)) {
         $patchStyleText(selection, { "background-color": color });
       }
     });
   }
 
-  setTextAlign(alignment: "left" | "center" | "right") {
+  setTextAlign(alignment: "left" | "center" | "right" | "justify") {
     this.editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
   }
 
   toggleBulletList() {
-    // Standard list toggling in Lexical uses commands
-    const isBulletList = this._style as string === "bullet"; // Simple check
+    const isBulletList = this._style === "bullet"; 
     if (isBulletList) {
       this.editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     } else {
@@ -284,7 +384,7 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   toggleOrderedList() {
-    const isOrderedList = this._style as string === "number";
+    const isOrderedList = this._style === "number";
     if (isOrderedList) {
       this.editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     } else {
@@ -293,19 +393,17 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   toggleTaskList() {
-    // Custom task list command if defined, otherwise insert bullet list
-    this.toggleBulletList();
+    const isCheckList = this._style === "check";
+    if (isCheckList) {
+      this.editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
+    } else {
+      this.editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
+    }
   }
 
-  liftListItem() {
-    this.editor.dispatchCommand(OUTDENT_CONTENT_COMMAND, undefined);
-  }
+  liftListItem() { this.editor.dispatchCommand(OUTDENT_CONTENT_COMMAND, undefined); }
+  sinkListItem() { this.editor.dispatchCommand(INDENT_CONTENT_COMMAND, undefined); }
 
-  sinkListItem() {
-    this.editor.dispatchCommand(INDENT_CONTENT_COMMAND, undefined);
-  }
-
-  // Comment implementation in Lexical
   applyDraftCommentMark(range: EditorSelectionRange) {
     this.editor.update(() => {
       const selection = $getSelection();
@@ -316,7 +414,6 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   removeCommentMark(range: EditorSelectionRange | null) {
-    // Unwrap all mark nodes containing draft ID
     this.editor.update(() => {
       const root = $getRoot();
       getDescendants(root).forEach((node) => {
@@ -328,7 +425,6 @@ export class LexicalAdapter implements EditorAdapter {
   }
 
   removeCommentMarkById(commentId: string) {
-    // Unwrap all mark nodes matching the specific commentId
     this.editor.update(() => {
       const root = $getRoot();
       getDescendants(root).forEach((node) => {
@@ -389,9 +485,119 @@ export class LexicalAdapter implements EditorAdapter {
     this.listeners.forEach((listener) => listener());
   }
 
-  updateUser(user: { name: string; color: string }) {
-    // Handles collaborative cursor identification. Managed inside CollaborationPlugin context,
-    // so we can expose this to update awareness if needed, but standard CollaborationPlugin
-    // handles awareness state directly via its props.
+  updateUser(user: { name: string; color: string }) {}
+
+  insertTable(rows: number = 3, columns: number = 3) {
+    console.log("[Lexical] 1. Đã nhận click chèn bảng");
+    this.editor.focus();
+    setTimeout(() => {
+      console.log("[Lexical] 2. Đang bắn lệnh chèn bảng...");
+      this.editor.dispatchCommand(INSERT_TABLE_COMMAND, {
+        rows: rows.toString(),
+        columns: columns.toString(),
+        includeHeaders: true,
+      });
+    }, 50);
+  }
+
+  insertRowAbove() {
+    this.editor.update(() => {
+      $insertTableRowAtSelection(false);
+    });
+  }
+
+  insertRowBelow() {
+    this.editor.update(() => {
+      $insertTableRowAtSelection(true);
+    });
+  }
+
+  insertColumnLeft() {
+    this.editor.update(() => {
+      $insertTableColumnAtSelection(false);
+    });
+  }
+
+  insertColumnRight() {
+    this.editor.update(() => {
+      $insertTableColumnAtSelection(true);
+    });
+  }
+
+  deleteRow() {
+    this.editor.update(() => {
+      $deleteTableRowAtSelection();
+    });
+  }
+
+  deleteColumn() {
+    this.editor.update(() => {
+      $deleteTableColumnAtSelection();
+    });
+  }
+
+  deleteTable() {
+    this.editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const tableCellNode = $getTableCellNodeFromLexicalNode(selection.anchor.getNode());
+        if (tableCellNode != null) {
+          const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+          tableNode.remove();
+        }
+      }
+    });
+  }
+
+  insertLink(url: string | null) {
+    this.editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
+  }
+
+  insertImage(src: string) {
+    this.editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        selection.insertNodes([$createImageNode(src)]);
+      }
+    });
+  }
+  insertHorizontalLine() {
+    this.editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined);
+  }
+
+  // --- BỘ DÒ TÌM NGỮ CẢNH (CONTEXT SENSORS) ---
+  get isLink(): boolean {
+    let _isLink = false;
+    this.editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        let current: any = selection.anchor.getNode();
+        while (current !== null) {
+          if (current.getType() === 'link') {
+            _isLink = true; break;
+          }
+          current = typeof current.getParent === 'function' ? current.getParent() : null;
+        }
+      }
+    });
+    return _isLink;
+  }
+
+  get isInsideTable(): boolean {
+    let _isInsideTable = false;
+    this.editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        let current: any = selection.anchor.getNode();
+        while (current !== null) {
+          if (current.getType() === 'table-cell' || current.getType() === 'table') {
+            _isInsideTable = true; break;
+          }
+          current = typeof current.getParent === 'function' ? current.getParent() : null;
+        }
+      }
+    });
+    return _isInsideTable;
   }
 }
+

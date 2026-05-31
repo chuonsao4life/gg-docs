@@ -32,7 +32,7 @@ export function EditorDynamicToolbar({
         case "view":
             return <ViewToolbar actions={actions} state={state} disabled={disabled} />
         case "insert":
-            return <InsertToolbar actions={actions} disabled={disabled} />
+            return <InsertToolbar actions={actions} state={state} disabled={disabled} />
         case "format":
             return <FormatToolbar actions={actions} state={state} disabled={disabled} />
         case "tools":

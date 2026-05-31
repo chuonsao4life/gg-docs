@@ -20,8 +20,16 @@ export type EditorToolbarActions = {
 
     onInsertImage?: () => void
     onInsertLink?: () => void
+    onRemoveLink?: () => void;
     onAddComment?: () => void
     onInsertTable?: () => void
+    onInsertRowAbove?: () => void;
+    onInsertRowBelow?: () => void;
+    onInsertColumnLeft?: () => void;
+    onInsertColumnRight?: () => void;
+    onDeleteRow?: () => void;
+    onDeleteColumn?: () => void;
+    onDeleteTable?: () => void;
     onInsertHorizontalLine?: () => void
 
     onStyleChange?: (style: string) => void
@@ -35,6 +43,7 @@ export type EditorToolbarActions = {
     onAlignLeft?: () => void
     onAlignCenter?: () => void
     onAlignRight?: () => void
+    onAlignJustify?: () => void
     onBulletList?: () => void
     onNumberedList?: () => void
     onChecklist?: () => void
@@ -57,6 +66,8 @@ export type EditorToolbarState = {
     style?: string
     font?: string
     fontSize?: string
+    textColor?: string;
+    highlightColor?: string;
     showRuler?: boolean
     showOutline?: boolean
     canUndo?: boolean
@@ -67,5 +78,7 @@ export type EditorToolbarState = {
         italic?: boolean
         underline?: boolean
     }
-    activeAlignment?: "left" | "center" | "right" | "justify"
+    alignment?: "left" | "center" | "right" | "justify"
+    isLink?: boolean;
+    isInsideTable?: boolean;
 }
