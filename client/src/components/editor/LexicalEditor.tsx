@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useMemo } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -80,6 +80,7 @@ interface LexicalEditorProps {
   onSelectComment?: (commentId: string) => void;
   onCommentMarksChange?: (commentIds: string[]) => void;
   canEdit?: boolean;
+  currentUserInfo?: { name: string; color: string };
 }
 
 function getDescendants(node: any): any[] {
@@ -200,6 +201,49 @@ function LexicalCommentPlugin({
 }) {
   const [editor] = useLexicalComposerContext();
 
+  const syncCommentDom = useCallback(() => {
+    const rootElement = editor.getRootElement();
+    if (!rootElement) return;
+
+    rootElement.querySelectorAll(".comment-highlight").forEach((el) => {
+      el.removeAttribute("data-comment-id");
+      el.removeAttribute("data-comment-draft");
+      el.removeAttribute("data-active-comment");
+      (el as HTMLElement).style.removeProperty("--comment-color");
+      (el as HTMLElement).style.removeProperty("--comment-base-color");
+    });
+
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      getDescendants(root).forEach((node) => {
+        if (!$isMarkNode(node)) return;
+
+        const element = editor.getElementByKey(node.getKey());
+        if (!element) return;
+
+        const ids = node.getIDs();
+        const commentId = ids.find((id) => id !== "draft") ?? ids[0];
+        if (!commentId) return;
+
+        element.setAttribute("data-comment-id", commentId);
+        if (commentId === "draft" || node.hasID("draft")) {
+          element.setAttribute("data-comment-draft", "true");
+        }
+
+        const comment = comments.find((item) => item.id === commentId);
+        if (comment) {
+          const identifier = comment.user.id || comment.user.username;
+          element.style.setProperty("--comment-color", getHighlightColor(identifier));
+          element.style.setProperty("--comment-base-color", getStableColor(identifier));
+        }
+
+        if (activeCommentId && ids.includes(activeCommentId)) {
+          element.setAttribute("data-active-comment", "true");
+        }
+      });
+    });
+  }, [activeCommentId, comments, editor]);
+
   // Scan and report all Comment ID Marks
   const emitCommentMarks = useCallback(() => {
     editor.getEditorState().read(() => {
@@ -219,43 +263,39 @@ function LexicalCommentPlugin({
   }, [editor, onCommentMarksChange]);
 
   useEffect(() => {
+    syncCommentDom();
     emitCommentMarks();
     return editor.registerUpdateListener(() => {
+      syncCommentDom();
       emitCommentMarks();
     });
-  }, [editor, emitCommentMarks]);
+  }, [editor, emitCommentMarks, syncCommentDom]);
 
-  // Sync active comment ID visual state
   useEffect(() => {
-    const rootElement = editor.getRootElement();
-    if (!rootElement) return;
+    syncCommentDom();
+  }, [syncCommentDom]);
 
-    const syncHighlights = () => {
-      rootElement.querySelectorAll("[data-comment-id]").forEach((el) => {
-        const commentId = el.getAttribute("data-comment-id");
-        
-        const comment = comments.find(c => c.id === commentId);
-        if (comment) {
-            const identifier = comment.user.id || comment.user.username;
-            const baseColor = getStableColor(identifier);
-            const bgColor = getHighlightColor(identifier);
-            (el as HTMLElement).style.setProperty("--comment-color", bgColor);
-            (el as HTMLElement).style.setProperty("--comment-base-color", baseColor);
-        }
+  useEffect(() => {
+    if (!activeCommentId) return;
 
-        if (activeCommentId && commentId === activeCommentId) {
-          el.setAttribute("data-active-comment", "true");
-        } else {
-          el.removeAttribute("data-active-comment");
-        }
+    const frameId = window.requestAnimationFrame(() => {
+      const rootElement = editor.getRootElement();
+      const activeElement = rootElement?.querySelector<HTMLElement>(
+        `[data-comment-id="${CSS.escape(activeCommentId)}"]`,
+      );
+
+      if (!activeElement) return;
+
+      activeElement.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
       });
-    };
+      editor.focus();
+    });
 
-    syncHighlights();
-    const observer = new MutationObserver(syncHighlights);
-    observer.observe(rootElement, { subtree: true, childList: true, attributes: true });
-    return () => observer.disconnect();
-  }, [editor, activeCommentId, comments]);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeCommentId, editor]);
 
   return null;
 }
@@ -406,6 +446,7 @@ export default function LexicalEditor({
   onSelectComment,
   onCommentMarksChange,
   canEdit,
+  currentUserInfo,
 }: LexicalEditorProps) {
   const editorWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -479,16 +520,29 @@ export default function LexicalEditor({
         <ClickableLinkPlugin />
         <TablePlugin />
         <HorizontalRulePlugin />
+        
         {/* Real-time Collaboration */}
         {yProvider && (
           <LexicalCollaboration>
             <CollaborationPlugin
               id={documentId}
-              providerFactory={(id, yjsDocMap) => {
-                yjsDocMap.set(id, doc);
-                return yProvider as any;
-              }}
+              providerFactory={useCallback(
+                (id, yjsDocMap) => {
+                  yjsDocMap.set(id, doc);
+                  return yProvider as any;
+                },
+                [doc, yProvider]
+              )}
               shouldBootstrap={false}
+              username={currentUserInfo?.name}
+              cursorColor={currentUserInfo?.color}
+              awarenessData={useMemo(
+                () =>
+                  currentUserInfo
+                    ? { name: currentUserInfo.name, color: currentUserInfo.color }
+                    : undefined,
+                [currentUserInfo?.name, currentUserInfo?.color]
+              )}
             />
           </LexicalCollaboration>
         )}

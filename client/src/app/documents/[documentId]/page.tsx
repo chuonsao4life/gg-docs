@@ -18,7 +18,7 @@ import {
   getDocumentSnapshot,
   saveDocumentSnapshot,
 } from "@/services/document.service";
-import { getStoredAccessToken, getStoredUser } from "@/services/auth.service";
+import { getStoredAccessToken, getStoredUser, onSessionChange } from "@/services/auth.service";
 import { getStableColor } from "@/lib/colors";
 
 
@@ -40,6 +40,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
   const [userInfo, setUserInfo] = useState(getStoredUser());
   const [title, setTitle] = useState("Tài liệu chưa có tiêu đề");
   const [myPermission, setMyPermission] = useState<{
+    role?: string | null;
     canEdit?: boolean;
     canComment?: boolean;
   } | null>(null);
@@ -86,16 +87,20 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
     }
   }, [displayName, userInfo, updateMyPresence]);
 
-  // Listen storage event để sync userInfo giữa các tabs (cùng trình duyệt)
+  // Listen storage event (cross-tab) AND onSessionChange (same-tab) để sync userInfo
   useEffect(() => {
-    const handleStorageChange = () => {
+    const syncUserInfo = () => {
       const storedUser = getStoredUser();
       setUserInfo(storedUser);
-      console.log("Sync userInfo từ tab khác:", storedUser);
+      console.log("Sync userInfo (storage/session event):", storedUser);
     };
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    window.addEventListener("storage", syncUserInfo);
+    const unsubscribe = onSessionChange(syncUserInfo);
+    return () => {
+      window.removeEventListener("storage", syncUserInfo);
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -138,19 +143,41 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
 
   useEffect(() => {
     // Chỉ update user info khi displayName thay đổi, không recreate editor
-    if (adapter && displayName) {
+    if (adapter && displayName && yProvider) {
       console.log(
         "🎨 Update cursor info (không recreate editor):",
         displayName,
       );
 
-      adapter.updateUser({
-        name: displayName,
-        color:
-          userInfo?.color || getStableColor(displayName + TAB_SESSION_ID),
-      });
+      const color = userInfo?.color || getStableColor(displayName + TAB_SESSION_ID);
+
+      // Directly update Yjs awareness state so remote cursors show the new name
+      const awareness = yProvider.awareness;
+      const localState = awareness.getLocalState();
+      if (localState) {
+        awareness.setLocalState({
+          ...localState,
+          name: displayName,
+          color,
+        });
+      }
+
+      adapter.updateUser({ name: displayName, color });
     }
-  }, [displayName, adapter, userInfo]);
+  }, [displayName, adapter, userInfo, yProvider]);
+
+  // Prevent Yjs awareness from timing out (default is 30s).
+  // This ensures the remote cursor stays visible as long as the user is in the room.
+  useEffect(() => {
+    if (!yProvider) return;
+    const interval = setInterval(() => {
+      const state = yProvider.awareness.getLocalState();
+      if (state) {
+        yProvider.awareness.setLocalState(state);
+      }
+    }, 15000); // ping every 15 seconds
+    return () => clearInterval(interval);
+  }, [yProvider]);
 
   if (loading) {
     return (
@@ -168,6 +195,9 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
       title={title}
       editor={adapter}
       canEdit={myPermission?.canEdit ?? false}
+      canComment={myPermission?.canComment ?? false}
+      currentUserId={userInfo?.id ?? null}
+      currentRole={myPermission?.role ?? null}
     >
       <LexicalEditor
         documentId={documentId}
@@ -175,6 +205,7 @@ function DocumentPageContent({ documentId }: { documentId: string }) {
         yProvider={yProvider}
         onReady={setAdapter}
         canEdit={myPermission?.canEdit ?? false}
+        currentUserInfo={displayName ? { name: displayName, color: userInfo?.color || getStableColor(displayName + TAB_SESSION_ID) } : undefined}
       />
     </AppLayout>
   );

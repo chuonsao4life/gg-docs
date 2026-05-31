@@ -28,7 +28,9 @@ import {
   deleteDocumentComment,
   listDocumentComments,
   renameDashboardDocument,
+  updateDocumentComment,
 } from "@/services/document.service";
+import { useBroadcastEvent, useEventListener } from "@/lib/liveblocks.config";
 
 function getCommentErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -40,12 +42,18 @@ export function AppLayout({
   title,
   editor,
   canEdit = true,
+  canComment = canEdit,
+  currentUserId,
+  currentRole,
 }: {
   children: ReactNode;
   documentId: string;
   title?: string;
   editor: EditorAdapter | null;
   canEdit?: boolean;
+  canComment?: boolean;
+  currentUserId?: string | null;
+  currentRole?: string | null;
 }) {
   const [activeMenu, setActiveMenu] = useState<EditorMenuKey>("format");
   const [selectedRange, setSelectedRange] =
@@ -66,6 +74,7 @@ export function AppLayout({
   const syncedCommentMarkIdsRef = useRef<Set<string>>(new Set());
   const recentlyCreatedCommentIdsRef = useRef<Set<string>>(new Set());
   const deletingCommentIdsRef = useRef<Set<string>>(new Set());
+  const broadcastCommentEvent = useBroadcastEvent();
 
   const loadComments = useCallback(async () => {
     const requestId = commentLoadRequestRef.current + 1;
@@ -105,6 +114,27 @@ export function AppLayout({
       window.clearTimeout(timeoutId);
     };
   }, [loadComments]);
+
+  useEventListener(({ event }) => {
+    if (
+      event.type !== "DOCUMENT_COMMENT_CHANGED" ||
+      event.documentId !== documentId
+    ) {
+      return;
+    }
+
+    if (event.action === "deleted" && event.commentId) {
+      removeCommentMarkById(event.commentId);
+      syncedCommentMarkIdsRef.current.delete(event.commentId);
+      recentlyCreatedCommentIdsRef.current.delete(event.commentId);
+      deletingCommentIdsRef.current.delete(event.commentId);
+      setActiveCommentId((current) =>
+        current === event.commentId ? null : current,
+      );
+    }
+
+    void loadComments();
+  });
 
   const handleChangeMenu = (menu: EditorMenuKey) => {
     console.log("Active menu:", menu);
@@ -159,6 +189,12 @@ export function AppLayout({
           current === commentId ? null : current,
         );
         clearDraftComment();
+        broadcastCommentEvent({
+          type: "DOCUMENT_COMMENT_CHANGED",
+          documentId,
+          action: "deleted",
+          commentId,
+        });
       } catch (error) {
         console.warn("Unable to delete comment", error);
         setCommentError(
@@ -166,7 +202,49 @@ export function AppLayout({
         );
       }
     },
-    [clearDraftComment, documentId, removeCommentMarkById],
+    [broadcastCommentEvent, clearDraftComment, documentId, removeCommentMarkById],
+  );
+
+  const editComment = useCallback(
+    async (commentId: string, content: string) => {
+      try {
+        setCommentError(null);
+        const updatedComment = await updateDocumentComment(documentId, commentId, {
+          content,
+        });
+        setComments((prev) =>
+          prev.map((comment) =>
+            comment.id === updatedComment.id ? updatedComment : comment,
+          ),
+        );
+        broadcastCommentEvent({
+          type: "DOCUMENT_COMMENT_CHANGED",
+          documentId,
+          action: "updated",
+          commentId,
+        });
+      } catch (error) {
+        console.warn("Unable to edit comment", error);
+        setCommentError(
+          getCommentErrorMessage(error, "Unable to edit comment."),
+        );
+        throw error;
+      }
+    },
+    [broadcastCommentEvent, documentId],
+  );
+
+  const canManageOwnComments = canComment || canEdit || currentRole === "owner";
+  const canManageComment = useCallback(
+    (comment: DocumentComment) => {
+      if (currentRole === "owner") return true;
+      return Boolean(
+        currentUserId &&
+          comment.user.id === currentUserId &&
+          canManageOwnComments,
+      );
+    },
+    [canManageOwnComments, currentRole, currentUserId],
   );
 
   useEffect(() => {
@@ -218,39 +296,47 @@ export function AppLayout({
         void loadComments();
       }
 
-      // [FIX]: Vô hiệu hoá tính năng tự động dọn rác (auto-delete orphaned comments).
-      // Việc tự động xoá sẽ gây ra race-condition khi Yjs chưa kịp tải xong text, 
-      // dẫn đến việc Editor báo cáo thiếu mark và Frontend tự động xoá nhầm comment của Owner.
-      // Bình luận mồ côi (khi text bị xoá) sẽ vẫn được giữ lại trong Comment Panel để user tự quyết định xoá bằng tay.
-      
-      // if (removedIds.length === 0) return;
-      // const removedIdSet = new Set(removedIds);
-      // removedIds.forEach((commentId) => {
-      //   deletingCommentIdsRef.current.add(commentId);
-      //   syncedCommentMarkIdsRef.current.delete(commentId);
-      //   recentlyCreatedCommentIdsRef.current.delete(commentId);
-      // });
-      // setComments((prev) =>
-      //   prev.filter((comment) => !removedIdSet.has(comment.id)),
-      // );
-      // setActiveCommentId((current) =>
-      //   current && removedIdSet.has(current) ? null : current,
-      // );
-      // void Promise.allSettled(
-      //   removedIds.map((commentId) =>
-      //     deleteDocumentComment(documentId, commentId),
-      //   ),
-      // ).then((results) => {
-      //   removedIds.forEach((commentId) => {
-      //     deletingCommentIdsRef.current.delete(commentId);
-      //   });
-      //   if (results.some((result) => result.status === "rejected")) {
-      //     setCommentError("Unable to delete removed comments.");
-      //     void loadComments();
-      //   }
-      // });
+      if (removedIds.length === 0) return;
+
+      const removedIdSet = new Set(removedIds);
+      removedIds.forEach((commentId) => {
+        deletingCommentIdsRef.current.add(commentId);
+        syncedCommentMarkIdsRef.current.delete(commentId);
+        recentlyCreatedCommentIdsRef.current.delete(commentId);
+      });
+      setComments((prev) =>
+        prev.filter((comment) => !removedIdSet.has(comment.id)),
+      );
+      setActiveCommentId((current) =>
+        current && removedIdSet.has(current) ? null : current,
+      );
+
+      void Promise.allSettled(
+        removedIds.map((commentId) =>
+          deleteDocumentComment(documentId, commentId),
+        ),
+      ).then((results) => {
+        removedIds.forEach((commentId) => {
+          deletingCommentIdsRef.current.delete(commentId);
+        });
+
+        if (results.some((result) => result.status === "rejected")) {
+          setCommentError("Unable to delete removed comments.");
+          void loadComments();
+          return;
+        }
+
+        removedIds.forEach((commentId) => {
+          broadcastCommentEvent({
+            type: "DOCUMENT_COMMENT_CHANGED",
+            documentId,
+            action: "deleted",
+            commentId,
+          });
+        });
+      });
     },
-    [comments, documentId, loadComments],
+    [broadcastCommentEvent, comments, documentId, loadComments],
   );
 
   const handleStartCommentFromSelection = () => {
@@ -291,6 +377,12 @@ export function AppLayout({
         documentId,
         commentPayload,
       );
+      broadcastCommentEvent({
+        type: "DOCUMENT_COMMENT_CHANGED",
+        documentId,
+        action: "created",
+        commentId: newComment.id,
+      });
 
       if (
         editor &&
@@ -560,7 +652,10 @@ export function AppLayout({
                 onSubmitComment={handleSubmitComment}
                 onCancelComposer={clearDraftComment}
                 onSelectComment={handleSelectComment}
+                onEditComment={editComment}
                 onDeleteComment={deleteComment}
+                canEditComment={canManageComment}
+                canDeleteComment={canManageComment}
               />
             </div>
           )}

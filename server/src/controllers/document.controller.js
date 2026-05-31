@@ -82,6 +82,12 @@ const createCommentSchema = z
     },
   );
 
+const updateCommentSchema = z
+  .object({
+    content: z.string().trim().min(1).max(2000),
+  })
+  .strict();
+
 function success(res, status, data, message) {
   return res.status(status).json({
     success: true,
@@ -1083,6 +1089,61 @@ export const createDocumentComment = async (req, res) => {
     return success(res, 201, formatComment(comment), "Comment created");
   } catch (err) {
     console.error("[createDocumentComment] error:", err);
+    return failure(res, 500, "Internal server error.");
+  }
+};
+
+export const updateDocumentComment = async (req, res) => {
+  try {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const parsed = updateCommentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return failure(res, 400, "Invalid input");
+    }
+
+    const comment = await prisma.comment.findUnique({
+      where: { id: req.params.commentId },
+      include: {
+        document: {
+          include: {
+            owner: true,
+            permissions: {
+              include: { user: true },
+              orderBy: { grantedAt: "asc" },
+            },
+          },
+        },
+        user: true,
+      },
+    });
+
+    if (!comment || comment.documentId !== req.params.documentId) {
+      return failure(res, 404, "Not found");
+    }
+
+    const role = getMyRole(comment.document, authUser.userId);
+    if (!role) {
+      return failure(res, 403, "No permission");
+    }
+
+    const canEdit =
+      comment.userId === authUser.userId ||
+      comment.document.ownerId === authUser.userId;
+    if (!canEdit) {
+      return failure(res, 403, "Permission denied");
+    }
+
+    const updatedComment = await prisma.comment.update({
+      where: { id: req.params.commentId },
+      data: { content: parsed.data.content },
+      include: { user: true },
+    });
+
+    return success(res, 200, formatComment(updatedComment), "Comment updated");
+  } catch (err) {
+    console.error("[updateDocumentComment] error:", err);
     return failure(res, 500, "Internal server error.");
   }
 };
