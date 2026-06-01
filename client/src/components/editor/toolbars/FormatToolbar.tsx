@@ -64,13 +64,26 @@ export default function FormatToolbar({ actions, state, disabled }: { actions?: 
                         const value = e.target.value
                         setLocalFontSize(value)
                         if (value && !isNaN(Number(value)) && Number(value) > 0) {
-                            actions?.onFontSizeChange?.(value)
-                        }
+            
+                        // 1. Báo cho Lexical thay đổi kích thước chữ ngay lập tức
+                        actions?.onFontSizeChange?.(value);
+                        
+                        // 2. Kỹ thuật "Focus-Lock": Giật lại focus về ô input ngay sau khi
+                        // Lexical hoàn tất việc render và cố gắng cướp focus về trang giấy.
+                        const inputElement = e.target as HTMLInputElement;
+                        setTimeout(() => {
+                            if (document.activeElement !== inputElement) {
+                                inputElement.focus();
+                            }
+                        }, 10); // 10ms là khoảng thời gian hoàn hảo để chặn đợt render của DOM
+                    }
                     }}
                     onBlur={(e) => {
                         const value = e.target.value || "11"
                         setLocalFontSize(value)
-                        if (!value || isNaN(Number(value)) || Number(value) <= 0) {
+                        if (value && !isNaN(Number(value)) && Number(value) > 0) {
+                            actions?.onFontSizeChange?.(value)
+                        } else {
                             actions?.onFontSizeChange?.("11")
                         }
                     }}

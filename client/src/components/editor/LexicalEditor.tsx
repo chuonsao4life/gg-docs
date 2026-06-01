@@ -37,6 +37,7 @@ import * as Y from "yjs";
 import { LiveblocksYjsProvider } from "@liveblocks/yjs";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HorizontalRulePlugin } from "@lexical/react/LexicalHorizontalRulePlugin";
+import TableResizerPlugin from "./plugins/TableResizerPlugin";
 
 // Custom Lexical Theme
 const theme = {
@@ -532,6 +533,7 @@ export default function LexicalEditor({
         <ClickableLinkPlugin />
         <TablePlugin />
         <HorizontalRulePlugin />
+        <TableResizerPlugin />
         
         {/* Real-time Collaboration */}
         {yProvider && (
