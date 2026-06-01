@@ -49,7 +49,7 @@ export default function FormatToolbar({ actions, state, disabled }: { actions?: 
                 value={fontDisplay}
                 onChange={(e) => actions?.onFontChange?.(e.target.value)}
             >
-                {["Arial", "Times New Roman", "Roboto", "Inter", "Georgia", "Verdana"].map(f => (
+                {["Arial", "Times New Roman", "Roboto", "Inter", "Georgia", "Verdana", "Courier New", "Monaco", "Trebuchet MS", "Impact", "Comic Sans MS", "Lucida Console", "Helvetica", "sans-serif"].map(f => (
                     <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
                 ))}
             </select> 

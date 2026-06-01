@@ -489,6 +489,18 @@ export default function LexicalEditor({
     [onSelectComment]
   );
 
+  const providerFactory = useCallback(
+    (id: string, yjsDocMap: Map<string, any>) => {
+      yjsDocMap.set(id, doc);
+      return yProvider as any;
+    },
+    [doc, yProvider]
+  );
+
+  const awarenessData = useMemo(
+    () => (currentUserInfo ? { name: currentUserInfo.name, color: currentUserInfo.color } : undefined),
+    [currentUserInfo?.name, currentUserInfo?.color]
+  );
   return (
     <LexicalComposer initialConfig={initialConfig}>
       <div
@@ -526,23 +538,11 @@ export default function LexicalEditor({
           <LexicalCollaboration>
             <CollaborationPlugin
               id={documentId}
-              providerFactory={useCallback(
-                (id, yjsDocMap) => {
-                  yjsDocMap.set(id, doc);
-                  return yProvider as any;
-                },
-                [doc, yProvider]
-              )}
+              providerFactory={providerFactory}
               shouldBootstrap={false}
               username={currentUserInfo?.name}
               cursorColor={currentUserInfo?.color}
-              awarenessData={useMemo(
-                () =>
-                  currentUserInfo
-                    ? { name: currentUserInfo.name, color: currentUserInfo.color }
-                    : undefined,
-                [currentUserInfo?.name, currentUserInfo?.color]
-              )}
+              awarenessData={awarenessData}
             />
           </LexicalCollaboration>
         )}
